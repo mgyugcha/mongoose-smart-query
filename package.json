@@ -1,0 +1,43 @@
+{
+  "name": "@mgyugcha/mongoose-smart-query",
+  "version": "0.0.1",
+  "description": "Optimize rest requests",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mgyugcha/mongoose-smart-query.git"
+  },
+  "keywords": [
+    "mongoose",
+    "rest",
+    "mongo",
+    "mongodb"
+  ],
+  "author": "Michael Yugcha",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/mgyugcha/mongoose-smart-query/issues"
+  },
+  "homepage": "https://github.com/mgyugcha/mongoose-smart-query#readme",
+  "devDependencies": {
+    "@types/jest": "^25.2.1",
+    "jest": "^25.3.0",
+    "mongoose": "^5.9.9",
+    "ts-jest": "^25.3.1",
+    "typescript": "^3.8.3"
+  },
+  "jest": {
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest"
+    },
+    "moduleFileExtensions": [
+      "js",
+      "ts"
+    ],
+    "testRegex": "^.+\\.spec\\.ts$"
+  }
+}
