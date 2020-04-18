@@ -25,6 +25,7 @@
   "homepage": "https://github.com/mgyugcha/mongoose-smart-query#readme",
   "devDependencies": {
     "@types/jest": "^25.2.1",
+    "@types/mongoose": "^5.7.10",
     "jest": "^25.3.0",
     "mongoose": "^5.9.9",
     "ts-jest": "^25.3.1",
@@ -38,6 +39,7 @@
       "js",
       "ts"
     ],
-    "testRegex": "^.+\\.spec\\.ts$"
+    "testRegex": "^.+\\.spec\\.ts$",
+    "testEnvironment": "node"
   }
 }
