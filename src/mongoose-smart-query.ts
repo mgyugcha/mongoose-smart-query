@@ -191,11 +191,24 @@ export default function (schema: any, {
       return lookups
     }
 
+    function getUnwind () {
+      if (!query[unwindName]) return []
+      return [
+        {
+          $unwind: {
+            path: `$${query[unwindName]}`, preserveNullAndEmptyArrays: true
+          }
+        }
+      ]
+    }
+
+
     const $match = getMatch()
     const $project = getFieldsProject(query)
     const lookups = getLookups($project)
     return [
       ...lookups,
+      ...getUnwind(),
       ...$match,
       ...getSort(),
       { $skip: ($page - 1) * $limit },
