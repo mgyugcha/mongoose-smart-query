@@ -95,7 +95,7 @@ export function removeKeys (initial: TObject, toRemove: TObject) : TObject {
 }
 
 export default function (schema: any, {
-  protectedFields = undefined,
+  protectedFields = '',
   defaultFields = '-id',
   defaultSort = '-_id',
   defaultLimit = 20,

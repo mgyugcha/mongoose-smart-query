@@ -143,7 +143,7 @@ describe('mongoose-smart-query', () => {
     })
   })
 
-  describe.only('$unwind', () => {
+  describe('$unwind', () => {
     it('unwind colours', async () => {
       const docs = await Persons.smartQuery({ $unwind: 'colours' })
       expect(docs).toHaveLength(9)
@@ -211,6 +211,13 @@ describe('mongoose-smart-query', () => {
       expect(docs[0]).toHaveProperty('random', 18)
       expect(docs[0].bestFriend).toHaveProperty('name', 'Michael Yugcha')
       expect(docs[0].bestFriend).toHaveProperty('random', 25)
+    })
+
+    it('lookup and nested unwind', async () => {
+      const docs = await Persons.smartQuery({
+        $fields: 'bestFriend { name colours }', $unwind: 'bestFriend.colours'
+      })
+      expect(docs).toHaveLength(6)
     })
   })
 })
