@@ -60,6 +60,19 @@ export function stringToQuery (query: string = '') : object {
   return JSON.parse(`{ ${preJSON} }`)
 }
 
+function parseValue (value: any, instance: string) {
+  switch (instance) {
+    case 'ObjectID':
+      return ObjectId(value)
+    case 'Date':
+      return new Date(value)
+    case 'Number':
+      return Number(value)
+    default:
+      return value
+  }
+}
+
 /**
  * Remove the keys from the initial object. If after this process the property
  * is empty it is removed
@@ -92,69 +105,52 @@ export default function (schema: any, {
   sortQueryName = '$sort',
   queryName = '$q',
   unwindName = '$unwind',
-  fieldsForDefaultQuery = undefined,
+  fieldsForDefaultQuery = '',
 }: PluginOptions) {
   const __protected = stringToQuery(protectedFields)
-  // schema._smartRestOptions = {
-  //   options: _options,
-  //   protected: stringToQuery(_options.protectedFields),
-  // }
 
   schema.statics.smartQuery = function (query: any = {}) {
     const pipeline = this.__smartQueryGetPipeline(Object.assign({}, query))
     return this.aggregate(pipeline)
   }
 
-
   schema.statics.__smartQueryGetPipeline = function (query: any, forCount = false) {
     const $page = parseInt(query[pageQueryName]) || 1
     delete query[pageQueryName]
     const $limit = parseInt(query[limitQueryName]) || defaultLimit
     delete query[limitQueryName]
-    /* let $project
-    let $sort
-    let $match
-    let $unwind
-    const lookups = []
-
-    function getQuery () {
-      if (!query[_options.queryName]) return
-      const fields = (fields => (
-        typeof fields === 'string' ? fields.split(' ') : []
-      ))(_options.fieldsForDefaultQuery)
-      if (fields.length === 0) {
-        return console.warn('Set the fieldsForDefaultQuery variable')
-      }
-      let q = query[_options.queryName]
-      q = q.replace(/[^\w-@ ]/g, '').replace(/\s+/g, ' ')
-      const regex = { $regex: RegExp(q, 'i') }
-      $match = {
-        $or: fields.reduce((acc, val) => [...acc, { [`${val}`]: regex }], [])
-      }
-      delete query[_options.queryName]
-    }
-
-    function getUnwind () {
-      if (!query[_options.unwindName]) return
-      $unwind = { path: `$${query[_options.unwindName]}`, preserveNullAndEmptyArrays: true }
-      delete query[_options.unwindName]
-    }
 
     function getDefault () {
+      const $match: TObject = {}
       for (const key in query) {
-        if (['getters', 'virtuals', 'populate'].includes(key)) continue
-        if (!$match) $match = {}
+        const path = schema.path(key)
+        if (!path && !key.includes('.')) { continue }
         const value = query[key]
-        if (value.includes('$exists')) {
+        if (typeof value === 'string' && value.includes('$exists')) {
           $match[key] = { $exists: true, $ne: [] }
         } else {
-          const path = schema.path(key)
-          const instance = path ? path.instance : undefined
-          $match[key] = parseValue(value, instance)
+          $match[key] = parseValue(value, path?.instance)
         }
       }
-    } */
+      return $match
+    }
 
+    function getMatch () :[any?] {
+      let $queryMatch = {}
+      if (query[queryName] && fieldsForDefaultQuery) {
+        const fields = fieldsForDefaultQuery.split(' ')
+        const regex = { $regex: RegExp(query[queryName].replace(/[^\w]/g, '.'), 'i') }
+        $queryMatch = { $or: fields.map(field => ({ [`${field}`]: regex })) }
+      }
+      let $queryDefault = getDefault()
+      if (Object.keys($queryMatch).length === 0 &&
+        Object.keys($queryDefault).length === 0) {
+        return []
+      } else {
+        return [{ $match: { ...$queryMatch, ...$queryDefault } }]
+      }
+    }
+    
     function getFieldsProject (query: TObject) :TObject | undefined {
       if (!query[fieldsQueryName] && defaultFields) {
         query[fieldsQueryName] = defaultFields
@@ -179,87 +175,32 @@ export default function (schema: any, {
       delete query[sortQueryName]
       return [{ $sort }]
     }
-    /*
-    $project = getFieldsProject(query)
-    console.log(getLookups($project))
-    // do lookup
-    utils.getListOfPossibleLookups($project).forEach(localField => {
-      const path = schema.path(localField)
-      if (!path || !path.options.ref) return
-      const { ref: from } = path.options
-      lookups.push({
-        $lookup: { from, localField, foreignField: '_id', as: localField },
-      }, {
-        $unwind: { path: `$${localField}`, preserveNullAndEmptyArrays: true }
+
+    function getLookups (project: any) {
+      const lookups: [any?] = []
+      getListOfPossibleLookups(project).forEach(localField => {
+        const path = schema.path(localField)
+        if (!path || !path.options.ref) return
+        const { ref: from } = path.options
+        lookups.push({
+          $lookup: { from, localField, foreignField: '_id', as: localField },
+        }, {
+          $unwind: { path: `$${localField}`, preserveNullAndEmptyArrays: true }
+        })
       })
-    })
+      return lookups
+    }
 
-    getSort()
-    getUnwind()
-    getQuery()
-    getDefault()
-
-    const pipeline = [...lookups]
-    if ($match) pipeline.push({ $match })
-    if ($unwind) pipeline.push({ $unwind })
-    if (!forCount) {
-      if ($sort) pipeline.push({ $sort })
-      pipeline.push({ $skip: ($page - 1) * $limit }, { $limit })
-      if ($project) pipeline.push({ $project })
-    } else {
-      pipeline.push({ $count: 'length' })
-    } */
+    const $match = getMatch()
     const $project = getFieldsProject(query)
+    const lookups = getLookups($project)
     return [
+      ...lookups,
+      ...$match,
       ...getSort(),
       { $skip: ($page - 1) * $limit },
       { $limit },
       ...$project ? [{ $project }] : [],
     ]
   }
-
-  /*
-
-  function getLookups ($project) {
-    const $lookups = []
-    utils.getListOfPossibleLookups($project).forEach(localField => {
-      const path = schema.path(localField)
-      if (!path || !path.options.ref) return
-      const { ref: from } = path.options
-      const foreignModel = mongoose.model(from)
-      if (foreignModel) {
-        console.log(foreignModel.schema)
-      }
-      $lookups.push({
-        $lookup: { from, localField, foreignField: '_id', as: localField },
-      }, {
-        $unwind: { path: `$${localField}`, preserveNullAndEmptyArrays: true }
-      })
-    })
-    return $lookups
-  }
-
-  schema.statics.smartQueryCount = function (query = {}) {
-    const pipeline = this.__smartQueryGetPipeline(Object.assign({}, query), true)
-    return new Promise((resolve, reject) => {
-      this.aggregate(pipeline)
-        .then(data => {
-          resolve(data.length !== 0 ? data[0].length : 0)
-        })
-        .catch(err => reject(err))
-    })
-  }
- */
 }
-
-/* function parseValue (value, instance) {
-  switch (instance) {
-    case 'ObjectID':
-      return ObjectId(value)
-    case 'Date':
-      return new Date(value)
-    default:
-      return value
-  }
-}
- */

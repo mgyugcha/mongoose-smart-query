@@ -142,4 +142,75 @@ describe('mongoose-smart-query', () => {
         .toEqual(['_id', 'name'].sort())
     })
   })
+
+  describe.only('$unwind', () => {
+    it('unwind colours', async () => {
+      const docs = await Persons.smartQuery({ $unwind: 'colours' })
+      expect(docs).toHaveLength(9)
+    })
+  })
+
+  describe('$q', () => {
+    it('simple query', async () => {
+      const docs = await Persons.smartQuery({ $q: 'michael' })
+      expect(docs).toHaveLength(1)
+    })
+  })
+
+  describe('complex operations', () => {
+    it('get with $lookup', async () => {
+      const docs = await Persons.smartQuery({ $fields: 'name bestFriend { name random }' })
+      expect(docs).toHaveLength(4)
+      expect(Object.keys(docs[2]).sort())
+        .toEqual(['_id', 'name', 'bestFriend'].sort())
+      expect(Object.keys(docs[2].bestFriend).sort())
+        .toEqual(['name', 'random'].sort())
+    })
+  
+    it('get with $lookup without spaces: "bestFriend{name}"', async () => {
+      const docs = await Persons.smartQuery({ $fields: 'name bestFriend{name random}' })
+      expect(docs).toHaveLength(4)
+      expect(Object.keys(docs[2]).sort())
+        .toEqual(['_id', 'name', 'bestFriend'].sort())
+      expect(Object.keys(docs[2].bestFriend).sort())
+        .toEqual(['name', 'random'].sort())
+    })
+  })
+
+  describe('match directly', () => {
+    it ('casting number and nonexistent value', async () => {
+      const docs = await Persons.smartQuery({ random: '18', mgyugcha: 'imnoreal' })
+      expect(docs).toHaveLength(1)
+      expect(docs[0].name).toEqual('Carlos Narvaez')
+    })
+  })
+
+  describe('multiple match', () => {
+    it ('$sort $fields $page', async () => {
+      const docs = await Persons.smartQuery({
+        $sort: '-random', $page: 2, fields: 'name password', $limit: 1
+      })
+      expect(docs).toHaveLength(1)
+      expect(docs[0].name).toEqual('Carlos Narvaez')
+    })
+
+    it('get sorted results', async () => {
+      const docs = await Persons.smartQuery({ $sort: 'random', $fields: 'random' })
+      expect(docs[0]._id.toString()).toEqual('5cef28d32e950227cb5bfaa8')
+      expect(docs[1]._id.toString()).toEqual('5d0ceed6d0daeb2019a142f8')
+      expect(docs[2]._id.toString()).toEqual('5cef28d32e950227cb5bfaa7')
+      expect(docs[3]._id.toString()).toEqual('5cef28d32e950227cb5bfaa6')
+    })
+
+    it('get matched field in $lookup', async () => {
+      const docs = await Persons.smartQuery({ 'bestFriend.random': 25, $fields: 'name random bestFriend { name random }' })
+      expect(docs).toHaveLength(1)
+      expect(Object.keys(docs[0]).sort())
+        .toEqual(['_id', 'name', 'random', 'bestFriend'].sort())
+      expect(docs[0]).toHaveProperty('name', 'Carlos Narvaez')
+      expect(docs[0]).toHaveProperty('random', 18)
+      expect(docs[0].bestFriend).toHaveProperty('name', 'Michael Yugcha')
+      expect(docs[0].bestFriend).toHaveProperty('random', 25)
+    })
+  })
 })
