@@ -11,16 +11,24 @@ describe('list of possible lookups', () => {
       client: { id: 1, name: 1 }
     })).toEqual(['client'])
   })
+
   it('multiple nested fields', () => {
     expect(getListOfPossibleLookups({
       client: { id: 1, name: 1 },
       provider: { id: 1, name: 1 },
     })).toEqual(['client', 'provider'])
   })
+
   it('nested on two levels', () => {
     expect(getListOfPossibleLookups({
       client: { id: 1, name: 1, provider: { id: 1, name: 1 } },
     })).toEqual(['client', 'client.provider'])
+  })
+
+  it('another way: client.name', () => {
+    expect(getListOfPossibleLookups({
+      'client.name': 1,
+    })).toEqual(['client'])
   })
 })
 
@@ -88,17 +96,6 @@ describe('mongoose-smart-query', () => {
   
   afterAll(() => Database.close())
 
-  describe('GET all', () => {
-    it('get with $q and $lookup', async () => {
-      const docs = await Persons.smartQuery()
-      // console.log(docs)
-      // expect(docs).toHaveLength(2)
-      // expect(docs[1]).toHaveProperty('_id')
-      // expect(docs[1]).toHaveProperty('name')
-      // expect(docs[1]).toHaveProperty('bestFriend')
-    })
-  })
-
   describe('$limit', () => {
     it('limit to 2 results', async () => {
       const docs = await Persons.smartQuery({ $limit: 2 })
@@ -148,6 +145,11 @@ describe('mongoose-smart-query', () => {
       const docs = await Persons.smartQuery({ $unwind: 'colours' })
       expect(docs).toHaveLength(9)
     })
+
+    it('unwind nonexistent field', async () => {
+      const docs = await Persons.smartQuery({ $unwind: 'viernes' })
+      expect(docs).toHaveLength(4)
+    })
   })
 
   describe('$q', () => {
@@ -157,7 +159,7 @@ describe('mongoose-smart-query', () => {
     })
   })
 
-  describe('complex operations', () => {
+  describe('nested documents', () => {
     it('get with $lookup', async () => {
       const docs = await Persons.smartQuery({ $fields: 'name bestFriend { name random }' })
       expect(docs).toHaveLength(4)
@@ -218,6 +220,47 @@ describe('mongoose-smart-query', () => {
         $fields: 'bestFriend { name colours }', $unwind: 'bestFriend.colours'
       })
       expect(docs).toHaveLength(6)
+    })
+
+    it('get with $q and $lookup', async () => {
+      const docs = await Persons.smartQuery({
+        $q: 'narvaez', $fields: 'name bestFriend { name }'
+      })
+      expect(docs).toHaveLength(2)
+      expect(docs[1]).toHaveProperty('_id')
+      expect(docs[1]).toHaveProperty('name')
+      expect(docs[1]).toHaveProperty('bestFriend.name')
+    })
+
+    it('$lookup as bestFriend.name ', async () => {
+      const docs = await Persons.smartQuery({
+        $fields: 'name bestFriend.name'
+      })
+      expect(docs).toHaveLength(4)
+      expect(docs[2]).toHaveProperty('_id')
+      expect(docs[2]).toHaveProperty('bestFriend.name')
+    })
+  })
+
+  describe('count', () => {
+    it('simple counter', async () => {
+      const size = await Persons.smartQueryCount()
+      expect(size).toEqual(4)
+    })
+
+    it('query with nonexistent field', async () => {
+      const size = await Persons.smartQueryCount({ egg: 'easter' })
+      expect(size).toEqual(4)
+    })
+
+    it('query without results', async () => {
+      const size = await Persons.smartQueryCount({ name: 'Geovanny' })
+      expect(size).toEqual(0)
+    })
+
+    it('with $unwind', async () => {
+      const size = await Persons.smartQueryCount({ $unwind: 'colours' })
+      expect(size).toEqual(9)
     })
   })
 })

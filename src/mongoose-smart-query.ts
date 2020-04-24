@@ -60,10 +60,17 @@ interface TObject { [value: string]: any }
 export function getListOfPossibleLookups ($project: any) :string[] {
   let keys: string[] = []
   for (const key in $project) {
-    if (typeof $project[key] !== 'object') continue
-    keys.push(key)
-    const subkeys = getListOfPossibleLookups($project[key])
-    keys = keys.concat(subkeys.map(subkey => key + '.' + subkey))
+    if (typeof $project[key] === 'object') {
+      keys.push(key)
+      const subkeys = getListOfPossibleLookups($project[key])
+      keys = keys.concat(subkeys.map(subkey => key + '.' + subkey))
+    } else if (key.includes('.')) {
+      const splited = key.split(/\.(.+)/)
+      keys.push(splited[0])
+      continue
+    } else {
+      continue
+    }
   }
   return keys
 }
@@ -142,15 +149,20 @@ export default function (schema: any, {
   const __protected = stringToQuery(protectedFields)
 
   schema.statics.smartQuery = function (query: any = {}) {
-    const pipeline = this.__smartQueryGetPipeline(Object.assign({}, query))
+    const pipeline = this.__smartQueryGetPipeline({ ...query })
     return this.aggregate(pipeline)
   }
 
-  schema.statics.__smartQueryGetPipeline = function (query: any, forCount = false) {
+  schema.statics.smartQueryCount = async function (query: any = {}) {
+    const pipeline = this.__smartQueryGetPipeline({ ...query }, true)
+    const result = await this.aggregate(pipeline)
+    return result.length === 0 ? 0 : result[0].size
+  }
+
+  schema.statics.__smartQueryGetPipeline =
+    function (query: any, forCount: boolean = false) {
     const $page = parseInt(query[pageQueryName]) || 1
-    delete query[pageQueryName]
     const $limit = parseInt(query[limitQueryName]) || defaultLimit
-    delete query[limitQueryName]
 
     function getDefault () {
       const $match: TObject = {}
@@ -189,7 +201,6 @@ export default function (schema: any, {
       }
       let $project = stringToQuery(query[fieldsQueryName])
       $project = removeKeys($project, __protected)
-      delete query[fieldsQueryName]
       return $project
     }
 
@@ -204,7 +215,6 @@ export default function (schema: any, {
       while ((matched = regex.exec(query[sortQueryName])) !== null) {
         $sort[matched[2]] = matched[1] ? -1 : 1
       }
-      delete query[sortQueryName]
       return [{ $sort }]
     }
 
@@ -234,18 +244,25 @@ export default function (schema: any, {
       ]
     }
 
-
     const $match = getMatch()
     const $project = getFieldsProject(query)
     const lookups = getLookups($project)
+    let subPipeline
+    if (forCount) {
+      subPipeline = [{ $count: 'size' }]
+    } else {
+      subPipeline = [
+        ...getSort(),
+        { $skip: ($page - 1) * $limit },
+        { $limit },
+        ...$project ? [{ $project }] : [],
+      ]
+    }
     return [
       ...lookups,
       ...getUnwind(),
       ...$match,
-      ...getSort(),
-      { $skip: ($page - 1) * $limit },
-      { $limit },
-      ...$project ? [{ $project }] : [],
+      ...subPipeline,
     ]
   }
 }
