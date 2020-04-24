@@ -1,19 +1,51 @@
-import mongoose from 'mongoose'
+import { Types } from 'mongoose'
 
-const { ObjectId } = mongoose.Types
+const { ObjectId } = Types
 
 interface PluginOptions {
+  /**
+   * Fields that should not be included in the query results. Default: `''`.
+   */
   protectedFields?: string,
+  /**
+   * Fields included in the default query results. Default `'_id'`.
+   */
   defaultFields?: string,
+  /**
+   * Default sorting. Default: `'-id'`.
+   */
   defaultSort?: string,
+  /**
+   * Number of documents per query. Default: `20`.
+   */
   defaultLimit?: number,
+  /**
+   * What fields to look for when making a query. Default: `''`.
+   */
   fieldsForDefaultQuery?: string,
-  // query names
+  /**
+   * Key for pagination. Default: `'$page'`.
+   */
   pageQueryName?: string,
+  /**
+   * Key to limit. Default: `'$limit'`.
+   */
   limitQueryName?: string,
+  /**
+   * Key to get specific fields. Default: `'$fields'`.
+   */
   fieldsQueryName?: string,
+  /**
+   * Key for sorting. Default: `$sort`.
+   */
   sortQueryName?: string,
+  /**
+   * Key for search. Default: `'$q'`.
+   */
   queryName?: string,
+  /**
+   * mongodb unwind documents. Default: `'$unwind'`.
+   */
   unwindName?: string,
 }
 

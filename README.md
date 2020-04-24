@@ -21,7 +21,7 @@ Key | Description | Default
 `limitQueryName` | Key to limit | `'$limit'`
 `fieldsQueryName` | Key to get specific fields | `'$fields'`
 `sortQueryName` | Key for sorting | `$sort`
-`queryName` | Key to search | `'$q'`
+`queryName` | Key for search | `'$q'`
 `unwindName` | mongodb unwind documents | `'$unwind'`
 
 ## Methods

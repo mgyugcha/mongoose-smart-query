@@ -2,7 +2,8 @@
   "name": "@mgyugcha/mongoose-smart-query",
   "version": "0.0.1",
   "description": "Optimize rest requests",
-  "main": "index.js",
+  "main": "./dist/mongoose-smart-query.js",
+  "types": "./dist/mongoose-smart-query.d.ts",
   "scripts": {
     "build": "tsc",
     "test": "jest"
@@ -25,10 +26,10 @@
   "homepage": "https://github.com/mgyugcha/mongoose-smart-query#readme",
   "devDependencies": {
     "@types/jest": "^25.2.1",
-    "@types/mongoose": "^5.7.10",
-    "jest": "^25.3.0",
-    "mongoose": "^5.9.9",
-    "ts-jest": "^25.3.1",
+    "@types/mongoose": "^5.7.12",
+    "jest": "^25.4.0",
+    "mongoose": "^5.9.10",
+    "ts-jest": "^25.4.0",
     "typescript": "^3.8.3"
   },
   "jest": {
