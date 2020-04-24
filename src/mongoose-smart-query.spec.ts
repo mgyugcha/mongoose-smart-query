@@ -240,6 +240,11 @@ describe('mongoose-smart-query', () => {
       expect(docs[2]).toHaveProperty('_id')
       expect(docs[2]).toHaveProperty('bestFriend.name')
     })
+
+    it('query without args', async () => {
+      const docs = await Persons.smartQuery()
+      expect(docs).toHaveLength(4)
+    })
   })
 
   describe('count', () => {

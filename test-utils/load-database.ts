@@ -1,7 +1,7 @@
 import mongoose from 'mongoose'
 import mongooseSmartQuery from '../src/mongoose-smart-query'
 
-const dbname = 'mongoose-smart-rest-test'
+const dbname = 'mongoose-smart-query-test'
 
 export default {
   async start () {
