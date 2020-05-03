@@ -249,22 +249,22 @@ describe('mongoose-smart-query', () => {
 
   describe('count', () => {
     it('simple counter', async () => {
-      const size = await Persons.smartQueryCount()
+      const size = await Persons.smartCount()
       expect(size).toEqual(4)
     })
 
     it('query with nonexistent field', async () => {
-      const size = await Persons.smartQueryCount({ egg: 'easter' })
+      const size = await Persons.smartCount({ egg: 'easter' })
       expect(size).toEqual(4)
     })
 
     it('query without results', async () => {
-      const size = await Persons.smartQueryCount({ name: 'Geovanny' })
+      const size = await Persons.smartCount({ name: 'Geovanny' })
       expect(size).toEqual(0)
     })
 
     it('with $unwind', async () => {
-      const size = await Persons.smartQueryCount({ $unwind: 'colours' })
+      const size = await Persons.smartCount({ $unwind: 'colours' })
       expect(size).toEqual(9)
     })
   })

@@ -153,7 +153,7 @@ export default function (schema: any, {
     return this.aggregate(pipeline)
   }
 
-  schema.statics.smartQueryCount = async function (query: any = {}) {
+  schema.statics.smartCount = async function (query: any = {}) {
     const pipeline = this.__smartQueryGetPipeline({ ...query }, true)
     const result = await this.aggregate(pipeline)
     return result.length === 0 ? 0 : result[0].size
