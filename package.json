@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://gitlab.com/mgyugcha/mongoose-smart-query.git"
+    "url": "git+https://github.com/mgyugcha/mongoose-smart-query.git"
   },
   "keywords": [
     "mongoose",
@@ -21,9 +21,9 @@
   "author": "Michael Yugcha",
   "license": "MIT",
   "bugs": {
-    "url": "https://gitlab.com/mgyugcha/mongoose-smart-query/-/issues"
+    "url": "https://github.com/mgyugcha/mongoose-smart-query/issues"
   },
-  "homepage": "https://gitlab.com/mgyugcha/mongoose-smart-query",
+  "homepage": "https://github.com/mgyugcha/mongoose-smart-query#readme",
   "devDependencies": {
     "@types/jest": "^25.2.1",
     "@types/mongoose": "^5.7.12",
