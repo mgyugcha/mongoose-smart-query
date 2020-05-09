@@ -1,4 +1,4 @@
-name: CI
+name: Testing
 
 on:
   push:
@@ -25,6 +25,7 @@ jobs:
       with:
         mongodb-version: '4.2'
 
-    - run: npm install
-    
-    - run: npm test -- --coverage
+    - name: Run npm commands
+      run: |
+        npm install
+        npm test -- --coverage
