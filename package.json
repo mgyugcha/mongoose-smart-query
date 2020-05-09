@@ -6,7 +6,10 @@
   "types": "./dist/mongoose-smart-query.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "jest"
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "precommit": "npm run lint",
+    "prepush": "npm run test"
   },
   "repository": {
     "type": "git",
@@ -15,6 +18,7 @@
   "keywords": [
     "mongoose",
     "rest",
+    "api",
     "mongo",
     "mongodb"
   ],
@@ -31,16 +35,5 @@
     "mongoose": "^5.9.10",
     "ts-jest": "^25.4.0",
     "typescript": "^3.8.3"
-  },
-  "jest": {
-    "transform": {
-      "^.+\\.tsx?$": "ts-jest"
-    },
-    "moduleFileExtensions": [
-      "js",
-      "ts"
-    ],
-    "testRegex": "^.+\\.spec\\.ts$",
-    "testEnvironment": "node"
   }
 }
