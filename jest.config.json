@@ -1,0 +1,12 @@
+{
+  "verbose": false,
+  "testEnvironment": "node",
+  "transform": {
+    "^.+\\.tsx?$": "ts-jest"
+  },
+  "moduleFileExtensions": [
+    "js",
+    "ts"
+  ],
+  "testRegex": "^.+\\.spec\\.ts$"
+}
