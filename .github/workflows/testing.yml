@@ -2,9 +2,13 @@ name: Testing
 
 on:
   push:
-    branches: [ continuous-integration ]
+    branches:
+    - master
+    - release
   pull_request:
-    branches: [ continuous-integration ]
+    branches:
+    - master
+    - release
 
 jobs:
   test:

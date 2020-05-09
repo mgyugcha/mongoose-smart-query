@@ -1,7 +1,7 @@
 # mongoose-smart-query
 
 [![npm version](https://badge.fury.io/js/mongoose-smart-query.svg)](https://badge.fury.io/js/mongoose-smart-query)
-![Testing](https://github.com/mgyugcha/mongoose-smart-query/workflows/Testing/badge.svg?branch=master)
+![Testing](https://github.com/mgyugcha/mongoose-smart-query/workflows/Testing/badge.svg)
 
 `mongoose-smart-query` toma como entrada un objeto (ejemplo: `req.query`) e
 interpreta las condiciones para poder realizar una consulta 'inteligente', de
