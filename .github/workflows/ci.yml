@@ -21,4 +21,4 @@ jobs:
     - name: npm install and test
       run: |
         npm install
-        npm npm test -- --coverage
+        npm test -- --coverage
