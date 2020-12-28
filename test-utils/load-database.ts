@@ -13,6 +13,7 @@ export default {
       birthday: Date,
       colours: [String],
       password: String,
+      useLinux: Boolean,
       bestFriend: { type: mongoose.Types.ObjectId, ref: 'persons' },
     })
     PersonSchema.plugin(mongooseSmartQuery, {
@@ -29,6 +30,7 @@ export default {
         birthday: '1993-09-27T05:00:00.000Z',
         colours: ['blue', 'red', 'black'],
         password: '12345',
+        useLinux: true,
       },
       {
         _id: '5cef28d32e950227cb5bfaa7',
@@ -37,6 +39,7 @@ export default {
         birthday: '1995-01-12T05:00:00.000Z',
         colours: ['yellow', 'red'],
         password: '12345',
+        useLinux: false,
         bestFriend: '5cef28d32e950227cb5bfaa6',
       },
       {

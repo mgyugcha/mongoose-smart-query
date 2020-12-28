@@ -107,6 +107,8 @@ function parseValue (value: any, instance: string) {
       return new Date(value)
     case 'Number':
       return Number(value)
+    case 'Boolean':
+      return typeof value === 'boolean' ? value : value === 'true'
     default:
       return value
   }

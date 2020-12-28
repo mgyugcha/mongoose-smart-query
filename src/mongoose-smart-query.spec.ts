@@ -187,6 +187,14 @@ describe('mongoose-smart-query', () => {
     })
   })
 
+  describe('match boolean', () => {
+    it ('casting number and nonexistent value', async () => {
+      const docs = await Persons.smartQuery({ useLinux: true })
+      expect(docs).toHaveLength(1)
+      expect(docs[0].name).toEqual('Michael Yugcha')
+    })
+  })
+
   describe('multiple match', () => {
     it ('$sort $fields $page', async () => {
       const docs = await Persons.smartQuery({
