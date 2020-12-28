@@ -2,3 +2,5 @@ src
 test-utils
 tsconfig.json
 *.tgz
+jest.config.json
+.github
