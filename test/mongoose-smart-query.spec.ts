@@ -1,9 +1,9 @@
-import Database, { getPersonModel } from '../test-utils/load-database'
+import Database, { getPersonModel } from './load-database'
 import {
   removeKeys,
   stringToQuery,
   getListOfPossibleLookups,
-} from './mongoose-smart-query'
+} from '../dist/mongoose-smart-query'
 
 describe('list of possible lookups', () => {
   it('a single nested field', () => {

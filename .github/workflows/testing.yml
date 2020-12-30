@@ -32,4 +32,5 @@ jobs:
     - name: Run npm commands
       run: |
         npm install
+        npm run build
         npm test -- --coverage

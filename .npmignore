@@ -1,5 +1,5 @@
 src
-test-utils
+test
 tsconfig.json
 *.tgz
 jest.config.json
