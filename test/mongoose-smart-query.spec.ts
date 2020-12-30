@@ -56,12 +56,12 @@ describe('string to object', () => {
 })
 
 describe('remove keys from object', () => {
-  it ('simple remove', () => {
+  it('simple remove', () => {
     const result = removeKeys({ name: 1, surname: 1 }, { surname: 1 })
     expect(result).toEqual({ name: 1 })
   })
 
-  it ('remove partial nested object', () => {
+  it('remove partial nested object', () => {
     const result = removeKeys({
       name: 1,
       friend: { name: 1, surname: 1 }
@@ -69,7 +69,7 @@ describe('remove keys from object', () => {
     expect(result).toEqual({ name: 1, friend: { name: 1 } })
   })
 
-  it ('remove complete nested object', () => {
+  it('remove complete nested object', () => {
     const result = removeKeys({
       name: 1,
       friend: { name: 1, surname: 1 }
@@ -77,7 +77,7 @@ describe('remove keys from object', () => {
     expect(result).toEqual({ name: 1 })
   })
 
-  it ('remove all keys from nested object', () => {
+  it('remove all keys from nested object', () => {
     const result = removeKeys({
       name: 1,
       friend: { name: 1, surname: 1 }
@@ -180,7 +180,7 @@ describe('mongoose-smart-query', () => {
   })
 
   describe('match directly', () => {
-    it ('casting number and nonexistent value', async () => {
+    it('casting number and nonexistent value', async () => {
       const docs = await Persons.smartQuery({ random: '18', mgyugcha: 'imnoreal' })
       expect(docs).toHaveLength(1)
       expect(docs[0].name).toEqual('Carlos Narvaez')
@@ -188,7 +188,7 @@ describe('mongoose-smart-query', () => {
   })
 
   describe('match boolean', () => {
-    it ('casting ', async () => {
+    it('casting ', async () => {
       const docs = await Persons.smartQuery({ useLinux: true })
       expect(docs).toHaveLength(1)
       expect(docs[0].name).toEqual('Michael Yugcha')
@@ -196,39 +196,51 @@ describe('mongoose-smart-query', () => {
   })
   
   describe('match with operators', () => {
+    describe('match $exists', () => {
+      it('true', async () => {
+        const docs = await Persons.smartQuery({ bestFriend: '{$exists}true' })
+        expect(docs).toHaveLength(1)
+      })
+
+      it('false', async () => {
+        const docs = await Persons.smartQuery({ bestFriend: '{$exists}false' })
+        expect(docs).toHaveLength(3)
+      })
+    })
+
     describe('with numbers', () => {
-      it ('operator $gt', async () => {
+      it('operator $gt', async () => {
         const docs = await Persons.smartQuery({ random: '{$gt}18' })
         expect(docs).toHaveLength(1)
       })
-      it ('operator $gte', async () => {
+      it('operator $gte', async () => {
         const docs = await Persons.smartQuery({ random: '{$gte}18' })
         expect(docs).toHaveLength(2)
       })
-      it ('operator $lt', async () => {
+      it('operator $lt', async () => {
         const docs = await Persons.smartQuery({ random: '{$lt}18' })
         expect(docs).toHaveLength(2)
       })
-      it ('operator $lte', async () => {
+      it('operator $lte', async () => {
         const docs = await Persons.smartQuery({ random: '{$lte}18' })
         expect(docs).toHaveLength(3)
       })
-      it ('operator $gte and $lt', async () => {
+      it('operator $gte and $lt', async () => {
         const docs = await Persons.smartQuery({ random: '{$gte}1{$lt}18' })
         expect(docs).toHaveLength(2)
       })
-      it ('operator $gte and $lte', async () => {
+      it('operator $gte and $lte', async () => {
         const docs = await Persons.smartQuery({ random: '{$gte}1{$lte}18' })
         expect(docs).toHaveLength(3)
       })
     })
 
     describe('with date', () => {
-      it ('operator $gt', async () => {
+      it('operator $gt', async () => {
         const docs = await Persons.smartQuery({ birthday: '{$gt}1993-04-01T05:00:00.000Z' })
         expect(docs).toHaveLength(2)
       })
-      it ('operator $gte', async () => {
+      it('operator $gte', async () => {
         const docs = await Persons.smartQuery({ birthday: '{$gte}1993-04-01T05:00:00.000Z' })
         expect(docs).toHaveLength(3)
       })
@@ -236,7 +248,7 @@ describe('mongoose-smart-query', () => {
   })
 
   describe('multiple match', () => {
-    it ('$sort $fields $page', async () => {
+    it('$sort $fields $page', async () => {
       const docs = await Persons.smartQuery({
         $sort: '-random', $page: 2, fields: 'name password', $limit: 1
       })

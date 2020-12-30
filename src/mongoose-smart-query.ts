@@ -174,24 +174,36 @@ export default function (schema: any, {
         const queryRegex = /(?:\{(\$?[\w ]+)\})?([^{}\n]+)/g
         let match
         const values = []
-        while ((match = queryRegex.exec(query[key])) !== null) {
-          values.push([match[0], match[1], match[2]])
-        }
-        for (const [, operator, value] of values) {
-          const parsedValue = parseValue(value, path?.instance)
-          if (operator) {
-            if (typeof $match[key] === 'object') {
-              $match[key][operator] = parsedValue
-            } else {
-              $match[key] = { [operator]: parsedValue }
-            }
-          } else {
-            if (typeof value === 'string' && value.includes('$exists')) {
-              $match[key] = { $exists: true, $ne: [] }
-            } else {
-              $match[key] = parsedValue
+        if (typeof query[key] === 'string') {
+          while ((match = queryRegex.exec(query[key])) !== null) {
+            values.push([match[0], match[1], match[2]])
+          }
+          for (const [, operator, value] of values) {
+            switch (operator) {
+              case '$exists':
+                $match[key] = { $exists: value !== 'false' }
+                break
+              default: {
+                const parsedValue = parseValue(value, path?.instance)
+                if (operator) {
+                  if (typeof $match[key] === 'object') {
+                    $match[key][operator] = parsedValue
+                  } else {
+                    $match[key] = { [operator]: parsedValue }
+                  }
+                } else {
+                  if (typeof value === 'string' && value.includes('$exists')) {
+                    $match[key] = { $exists: true, $ne: [] }
+                  } else {
+                    $match[key] = parsedValue
+                  }
+                }
+                break
+              }
             }
           }
+        } else {
+          $match[key] = parseValue(query[key], path?.instance)
         }
       }
       return $match
