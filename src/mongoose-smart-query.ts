@@ -150,19 +150,19 @@ export default function (schema: any, {
 }: PluginOptions) {
   const __protected = stringToQuery(protectedFields)
 
-  schema.statics.smartQuery = function (query: any = {}) {
+  schema.statics.smartQuery = function (query: { [key: string]: string } = {}) {
     const pipeline = this.__smartQueryGetPipeline({ ...query })
     return this.aggregate(pipeline)
   }
 
-  schema.statics.smartCount = async function (query: any = {}) {
+  schema.statics.smartCount = async function (query: { [key: string]: string } = {}) {
     const pipeline = this.__smartQueryGetPipeline({ ...query }, true)
     const result = await this.aggregate(pipeline)
     return result.length === 0 ? 0 : result[0].size
   }
 
   schema.statics.__smartQueryGetPipeline =
-    function (query: any, forCount: boolean = false) {
+    function (query: { [key: string]: string }, forCount: boolean = false) {
     const $page = parseInt(query[pageQueryName]) || 1
     const $limit = parseInt(query[limitQueryName]) || defaultLimit
 
@@ -171,11 +171,27 @@ export default function (schema: any, {
       for (const key in query) {
         const path = schema.path(key)
         if (!path && !key.includes('.')) { continue }
-        const value = query[key]
-        if (typeof value === 'string' && value.includes('$exists')) {
-          $match[key] = { $exists: true, $ne: [] }
-        } else {
-          $match[key] = parseValue(value, path?.instance)
+        const queryRegex = /(?:\{(\$?[\w ]+)\})?([^{}\n]+)/g
+        let match
+        const values = []
+        while ((match = queryRegex.exec(query[key])) !== null) {
+          values.push([match[0], match[1], match[2]])
+        }
+        for (const [, operator, value] of values) {
+          const parsedValue = parseValue(value, path?.instance)
+          if (operator) {
+            if (typeof $match[key] === 'object') {
+              $match[key][operator] = parsedValue
+            } else {
+              $match[key] = { [operator]: parsedValue }
+            }
+          } else {
+            if (typeof value === 'string' && value.includes('$exists')) {
+              $match[key] = { $exists: true, $ne: [] }
+            } else {
+              $match[key] = parsedValue
+            }
+          }
         }
       }
       return $match

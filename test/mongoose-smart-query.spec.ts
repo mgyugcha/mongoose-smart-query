@@ -188,10 +188,50 @@ describe('mongoose-smart-query', () => {
   })
 
   describe('match boolean', () => {
-    it ('casting number and nonexistent value', async () => {
+    it ('casting ', async () => {
       const docs = await Persons.smartQuery({ useLinux: true })
       expect(docs).toHaveLength(1)
       expect(docs[0].name).toEqual('Michael Yugcha')
+    })
+  })
+  
+  describe('match with operators', () => {
+    describe('with numbers', () => {
+      it ('operator $gt', async () => {
+        const docs = await Persons.smartQuery({ random: '{$gt}18' })
+        expect(docs).toHaveLength(1)
+      })
+      it ('operator $gte', async () => {
+        const docs = await Persons.smartQuery({ random: '{$gte}18' })
+        expect(docs).toHaveLength(2)
+      })
+      it ('operator $lt', async () => {
+        const docs = await Persons.smartQuery({ random: '{$lt}18' })
+        expect(docs).toHaveLength(2)
+      })
+      it ('operator $lte', async () => {
+        const docs = await Persons.smartQuery({ random: '{$lte}18' })
+        expect(docs).toHaveLength(3)
+      })
+      it ('operator $gte and $lt', async () => {
+        const docs = await Persons.smartQuery({ random: '{$gte}1{$lt}18' })
+        expect(docs).toHaveLength(2)
+      })
+      it ('operator $gte and $lte', async () => {
+        const docs = await Persons.smartQuery({ random: '{$gte}1{$lte}18' })
+        expect(docs).toHaveLength(3)
+      })
+    })
+
+    describe('with date', () => {
+      it ('operator $gt', async () => {
+        const docs = await Persons.smartQuery({ birthday: '{$gt}1993-04-01T05:00:00.000Z' })
+        expect(docs).toHaveLength(2)
+      })
+      it ('operator $gte', async () => {
+        const docs = await Persons.smartQuery({ birthday: '{$gte}1993-04-01T05:00:00.000Z' })
+        expect(docs).toHaveLength(3)
+      })
     })
   })
 
