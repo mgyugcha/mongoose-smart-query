@@ -208,6 +208,13 @@ describe('mongoose-smart-query', () => {
       })
     })
 
+    describe('$includes', () => {
+      it('search inside field', async () => {
+        const docs = await Persons.smartQuery({ name: '{$includes}narvaez' })
+        expect(docs).toHaveLength(2)
+      })
+    })
+
     describe('with numbers', () => {
       it('operator $gt', async () => {
         const docs = await Persons.smartQuery({ random: '{$gt}18' })

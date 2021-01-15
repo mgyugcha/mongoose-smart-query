@@ -183,6 +183,9 @@ export default function (schema: any, {
               case '$exists':
                 $match[key] = { $exists: value !== 'false' }
                 break
+              case '$includes':
+                $match[key] = { $regex: RegExp(value.replace(/[^\w]/g, '.'), 'i') }
+                break
               default: {
                 const parsedValue = parseValue(value, path?.instance)
                 if (operator) {
