@@ -47,6 +47,14 @@ interface PluginOptions {
    * mongodb unwind documents. Default: `'$unwind'`.
    */
   unwindName?: string,
+  /**
+   * Key for get all fields. Default: `$allFields`.
+   */
+  allFieldsQueryName?: string,
+  /**
+   * Get all fields by default
+   */
+  getAllFieldsByDefault?: boolean,
 }
 
 interface TObject { [value: string]: any }
@@ -147,6 +155,8 @@ export default function (schema: any, {
   queryName = '$q',
   unwindName = '$unwind',
   fieldsForDefaultQuery = '',
+  allFieldsQueryName = '$getAllFields',
+  getAllFieldsByDefault = false,
 }: PluginOptions) {
   const __protected = stringToQuery(protectedFields)
 
@@ -163,6 +173,7 @@ export default function (schema: any, {
 
   schema.statics.__smartQueryGetPipeline =
     function (query: { [key: string]: string }, forCount: boolean = false) {
+    const originalQuery = JSON.parse(JSON.stringify(query))
     const $page = parseInt(query[pageQueryName]) || 1
     const $limit = parseInt(query[limitQueryName]) || defaultLimit
 
@@ -288,8 +299,11 @@ export default function (schema: any, {
         ...getSort(),
         { $skip: ($page - 1) * $limit },
         { $limit },
-        ...$project ? [{ $project }] : [],
       ]
+      if (!((!originalQuery[fieldsQueryName] && getAllFieldsByDefault === true) ||
+        query[allFieldsQueryName]?.toString() === 'true')) {
+        subPipeline.push({ $project })
+      }
     }
     return [
       ...lookups,

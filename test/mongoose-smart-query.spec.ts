@@ -335,4 +335,18 @@ describe('mongoose-smart-query', () => {
       expect(size).toEqual(9)
     })
   })
+
+  describe('$getAllFields', () => {
+    it('obtener todos los campos', async () => {
+      const [doc] = await Persons.smartQuery({
+        _id: '5cef28d32e950227cb5bfaa6', $getAllFields: 'true'
+      })
+      expect(doc).toHaveProperty('name')
+      expect(doc).toHaveProperty('random')
+      expect(doc).toHaveProperty('birthday')
+      expect(doc).toHaveProperty('colours')
+      expect(doc).toHaveProperty('password')
+      expect(doc).toHaveProperty('useLinux')
+    })
+  })
 })
