@@ -10,7 +10,8 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "precommit": "npm run lint",
-    "prepush": "npm run test"
+    "prepush": "npm run test",
+    "lint": "eslint --ext .ts ."
   },
   "repository": {
     "type": "git",
@@ -31,6 +32,14 @@
   "homepage": "https://github.com/mgyugcha/mongoose-smart-query#readme",
   "devDependencies": {
     "@types/jest": "^26.0.22",
+    "@typescript-eslint/eslint-plugin": "^4.20.0",
+    "@typescript-eslint/parser": "^4.20.0",
+    "eslint": "^7.23.0",
+    "eslint-config-standard": "^16.0.2",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-jest": "^24.3.2",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.3.1",
     "jest": "^26.6.3",
     "mongoose": "^5.12.2",
     "ts-jest": "^26.5.4",
