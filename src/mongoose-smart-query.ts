@@ -227,7 +227,7 @@ export default function (schema: any, {
       let $queryMatch = {}
       if (query[queryName] && fieldsForDefaultQuery) {
         const fields = fieldsForDefaultQuery.split(' ')
-        const regex = { $regex: RegExp(query[queryName].replace(/[^\w]/g, '.'), 'i') }
+        const regex = { $regex: RegExp(query[queryName].replace(/[(\)[\]]/g, '.'), 'i') }
         $queryMatch = { $or: fields.map(field => ({ [`${field}`]: regex })) }
       }
       let $queryDefault = getDefault()

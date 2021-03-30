@@ -157,6 +157,15 @@ describe('mongoose-smart-query', () => {
       const docs = await Persons.smartQuery({ $q: 'michael' })
       expect(docs).toHaveLength(1)
     })
+
+    it('specials characters', async () => {
+      const docs = await Persons.smartQuery({ $q: 'ñandú' })
+      expect(docs).toHaveLength(1)
+    })
+    it('more specials character', async () => {
+      const docs = await Persons.smartQuery({ $q: '{)(&^%$][{}\'.,;`~|/^' })
+      expect(docs).toHaveLength(0)
+    })
   })
 
   describe('nested documents', () => {

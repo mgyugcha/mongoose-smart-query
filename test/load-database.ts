@@ -53,7 +53,7 @@ export default {
       },
       {
         _id: '5cef28d32e950227cb5bfaa8',
-        name: 'Luis Solines',
+        name: 'Luis Ñandú',
         random: 1,
         birthday: new Date('1984-04-07T05:00:00.000Z'),
         colours: ['pink', 'white'],
