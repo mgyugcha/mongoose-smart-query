@@ -66,13 +66,13 @@ export default {
         birthday: new Date('1993-04-01T05:00:00.000Z'),
         colours: ['pink', 'black'],
         password: '12345',
-      }
+      },
     ])
   },
   async close () {
     await connection.dropDatabase()
     connection.close()
-  }
+  },
 }
 
 export const getPersonModel = () => model('persons')

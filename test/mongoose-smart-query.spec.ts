@@ -8,7 +8,7 @@ import {
 describe('list of possible lookups', () => {
   it('a single nested field', () => {
     expect(getListOfPossibleLookups({
-      client: { id: 1, name: 1 }
+      client: { id: 1, name: 1 },
     })).toEqual(['client'])
   })
 
@@ -35,13 +35,13 @@ describe('list of possible lookups', () => {
 describe('string to object', () => {
   it('name friends { name }', () => {
     expect(stringToQuery('name friends { name }')).toEqual({
-      name: 1, friends: { name: 1 }
+      name: 1, friends: { name: 1 },
     })
   })
 
   it('friends.name friends.friend.name', () => {
     expect(stringToQuery('friends.name friends.friend.name')).toEqual({
-      'friends.name': 1, 'friends.friend.name': 1
+      'friends.name': 1, 'friends.friend.name': 1,
     })
   })
 
@@ -49,8 +49,8 @@ describe('string to object', () => {
     expect(stringToQuery('friends { name } nextFriends { friend { name } }')).toEqual({
       friends: { name: 1 },
       nextFriends: {
-        friend: { name: 1 }
-      }
+        friend: { name: 1 },
+      },
     })
   })
 })
@@ -64,7 +64,7 @@ describe('remove keys from object', () => {
   it('remove partial nested object', () => {
     const result = removeKeys({
       name: 1,
-      friend: { name: 1, surname: 1 }
+      friend: { name: 1, surname: 1 },
     }, { friend: { surname: 1 } })
     expect(result).toEqual({ name: 1, friend: { name: 1 } })
   })
@@ -72,7 +72,7 @@ describe('remove keys from object', () => {
   it('remove complete nested object', () => {
     const result = removeKeys({
       name: 1,
-      friend: { name: 1, surname: 1 }
+      friend: { name: 1, surname: 1 },
     }, { friend: 1 })
     expect(result).toEqual({ name: 1 })
   })
@@ -80,7 +80,7 @@ describe('remove keys from object', () => {
   it('remove all keys from nested object', () => {
     const result = removeKeys({
       name: 1,
-      friend: { name: 1, surname: 1 }
+      friend: { name: 1, surname: 1 },
     }, { friend: { name: 1, surname: 1 } })
     expect(result).toEqual({ name: 1 })
   })
@@ -93,7 +93,7 @@ describe('mongoose-smart-query', () => {
     await Database.start()
     Persons = getPersonModel()
   })
-  
+
   afterAll(() => Database.close())
 
   describe('$limit', () => {
@@ -102,14 +102,14 @@ describe('mongoose-smart-query', () => {
       expect(docs).toHaveLength(2)
     })
   })
-  
+
   describe('$limit and $page', () => {
     it('get data per page 1', async () => {
       const docs = await Persons.smartQuery({ $limit: 1, $page: 1 })
       expect(docs).toHaveLength(1)
       expect(docs[0].name).toEqual('Marta Narvaez')
     })
-  
+
     it('get data per $limit:2 & $page:2', async () => {
       const docs = await Persons.smartQuery({ $limit: 2, $page: 2 })
       expect(docs).toHaveLength(2)
@@ -118,20 +118,20 @@ describe('mongoose-smart-query', () => {
   })
 
   describe('$fields', () => {
-    it('with default args', async  () => {
+    it('with default args', async () => {
       const docs = await Persons.smartQuery()
       expect(docs).toHaveLength(4)
       expect(Object.keys(docs[0]).sort())
         .toEqual(['_id', 'name'].sort())
     })
-  
+
     it('get only random and birthday', async () => {
       const docs = await Persons.smartQuery({ $fields: 'random birthday' })
       expect(docs).toHaveLength(4)
       expect(Object.keys(docs[0]).sort())
         .toEqual(['_id', 'random', 'birthday'].sort())
     })
-  
+
     it('try to get protected fields', async () => {
       const docs = await Persons.smartQuery({ $fields: 'name password' })
       expect(docs).toHaveLength(4)
@@ -177,7 +177,7 @@ describe('mongoose-smart-query', () => {
       expect(Object.keys(docs[2].bestFriend).sort())
         .toEqual(['name', 'random'].sort())
     })
-  
+
     it('get with $lookup without spaces: "bestFriend{name}"', async () => {
       const docs = await Persons.smartQuery({ $fields: 'name bestFriend{name random}' })
       expect(docs).toHaveLength(4)
@@ -203,7 +203,7 @@ describe('mongoose-smart-query', () => {
       expect(docs[0].name).toEqual('Michael Yugcha')
     })
   })
-  
+
   describe('match with operators', () => {
     describe('match $exists', () => {
       it('true', async () => {
@@ -266,7 +266,7 @@ describe('mongoose-smart-query', () => {
   describe('multiple match', () => {
     it('$sort $fields $page', async () => {
       const docs = await Persons.smartQuery({
-        $sort: '-random', $page: 2, fields: 'name password', $limit: 1
+        $sort: '-random', $page: 2, fields: 'name password', $limit: 1,
       })
       expect(docs).toHaveLength(1)
       expect(docs[0].name).toEqual('Carlos Narvaez')
@@ -293,14 +293,14 @@ describe('mongoose-smart-query', () => {
 
     it('lookup and nested unwind', async () => {
       const docs = await Persons.smartQuery({
-        $fields: 'bestFriend { name colours }', $unwind: 'bestFriend.colours'
+        $fields: 'bestFriend { name colours }', $unwind: 'bestFriend.colours',
       })
       expect(docs).toHaveLength(6)
     })
 
     it('get with $q and $lookup', async () => {
       const docs = await Persons.smartQuery({
-        $q: 'narvaez', $fields: 'name bestFriend { name }'
+        $q: 'narvaez', $fields: 'name bestFriend { name }',
       })
       expect(docs).toHaveLength(2)
       expect(docs[1]).toHaveProperty('_id')
@@ -310,7 +310,7 @@ describe('mongoose-smart-query', () => {
 
     it('$lookup as bestFriend.name ', async () => {
       const docs = await Persons.smartQuery({
-        $fields: 'name bestFriend.name'
+        $fields: 'name bestFriend.name',
       })
       expect(docs).toHaveLength(4)
       expect(docs[2]).toHaveProperty('_id')
@@ -348,7 +348,7 @@ describe('mongoose-smart-query', () => {
   describe('$getAllFields', () => {
     it('obtener todos los campos', async () => {
       const [doc] = await Persons.smartQuery({
-        _id: '5cef28d32e950227cb5bfaa6', $getAllFields: 'true'
+        _id: '5cef28d32e950227cb5bfaa6', $getAllFields: 'true',
       })
       expect(doc).toHaveProperty('name')
       expect(doc).toHaveProperty('random')
