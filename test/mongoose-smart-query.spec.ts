@@ -345,7 +345,7 @@ describe('mongoose-smart-query', () => {
       expect(doc).toHaveProperty('random')
       expect(doc).toHaveProperty('birthday')
       expect(doc).toHaveProperty('colours')
-      expect(doc).toHaveProperty('password')
+      expect(doc).not.toHaveProperty('password')
       expect(doc).toHaveProperty('useLinux')
     })
   })

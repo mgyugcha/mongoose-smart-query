@@ -89,7 +89,7 @@ export function getListOfPossibleLookups ($project: any) :string[] {
  * @param query String to convert to object.
  * @returns The resulting object.
  */
-export function stringToQuery (query: string = '') : object {
+export function stringToQuery (query: string = '', value = '1') : object {
   const regex = /(})(?!$| *})|([\w.]+)(?= *{)|([\w.]+)(?=$| *})|([\w.]+)/g
   const preJSON = query.replace(regex, (match, p1, p2, p3, p4) => {
     if (p1) {
@@ -97,9 +97,9 @@ export function stringToQuery (query: string = '') : object {
     } else if (p2) {
       return `"${p2}":`
     } else if (p3) {
-      return `"${p3}": 1`
+      return `"${p3}": ${value}`
     } else if (p4) {
-      return `"${p4}": 1,`
+      return `"${p4}": ${value},`
     } else {
       return ''
     }
@@ -303,6 +303,8 @@ export default function (schema: any, {
       if (!((!originalQuery[fieldsQueryName] && getAllFieldsByDefault === true) ||
         query[allFieldsQueryName]?.toString() === 'true')) {
         subPipeline.push({ $project })
+      } else {
+        subPipeline.push({ $project: stringToQuery(protectedFields, '0') })
       }
     }
     return [
