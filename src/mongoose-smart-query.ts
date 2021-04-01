@@ -301,10 +301,12 @@ export default function (schema: any, {
           { $limit },
         ]
         if (!((!originalQuery[fieldsQueryName] && getAllFieldsByDefault === true) ||
-        query[allFieldsQueryName]?.toString() === 'true')) {
+          query[allFieldsQueryName]?.toString() === 'true')) {
           subPipeline.push({ $project })
         } else {
-          subPipeline.push({ $project: stringToQuery(protectedFields, '0') })
+          if (protectedFields) {
+            subPipeline.push({ $project: stringToQuery(protectedFields, '0') })
+          }
         }
       }
       return [
