@@ -107,8 +107,8 @@ export function stringToQuery (query: string = '', value = '1') : object {
   return JSON.parse(`{ ${preJSON} }`)
 }
 
-function parseValue (value: any, instance: string) {
-  switch (instance) {
+function parseValue (value: any, path: any): any {
+  switch (path?.instance) {
     case 'ObjectID':
       return ObjectId(value)
     case 'Date':
@@ -117,6 +117,8 @@ function parseValue (value: any, instance: string) {
       return Number(value)
     case 'Boolean':
       return typeof value === 'boolean' ? value : value === 'true'
+    case 'Array':
+      return parseValue(value, path?.caster)
     default:
       return value
   }
@@ -194,11 +196,19 @@ export default function (schema: any, {
                 case '$exists':
                   $match[key] = { $exists: value !== 'false' }
                   break
+                case '$in':
+                  $match[key] = {
+                    $in: value.split(',').map(item => {
+                      return parseValue(item.trim(), path)
+                    }),
+                  }
+                  // console.log(key, value, $match[key], path)
+                  break
                 case '$includes':
                   $match[key] = { $regex: RegExp(value.replace(/[^\w]/g, '.'), 'i') }
                   break
                 default: {
-                  const parsedValue = parseValue(value, path?.instance)
+                  const parsedValue = parseValue(value, path)
                   if (operator) {
                     if (typeof $match[key] === 'object') {
                       $match[key][operator] = parsedValue
@@ -217,7 +227,7 @@ export default function (schema: any, {
               }
             }
           } else {
-            $match[key] = parseValue(query[key], path?.instance)
+            $match[key] = parseValue(query[key], path)
           }
         }
         return $match

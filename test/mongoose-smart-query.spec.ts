@@ -261,6 +261,28 @@ describe('mongoose-smart-query', () => {
         expect(docs).toHaveLength(3)
       })
     })
+
+    describe('operator $in', () => {
+      it('search with number field', async () => {
+        const docs = await Persons.smartQuery({ random: '{$in}18' })
+        expect(docs).toHaveLength(1)
+      })
+      it('search with ObjectId', async () => {
+        const docs = await Persons.smartQuery({ bestFriend: '{$in}5cef28d32e950227cb5bfaa6' })
+        expect(docs).toHaveLength(1)
+      })
+      it.todo('search with empty {$in}')
+      it('search with ObjectId in _id', async () => {
+        const docs = await Persons.smartQuery({
+          _id: '{$in}5cef28d32e950227cb5bfaa6, 5d0ceed6d0daeb2019a142f8',
+        })
+        expect(docs).toHaveLength(2)
+      })
+      it('search in array', async () => {
+        const docs = await Persons.smartQuery({ colours: '{$in}red,blue' })
+        expect(docs).toHaveLength(2)
+      })
+    })
   })
 
   describe('multiple match', () => {
