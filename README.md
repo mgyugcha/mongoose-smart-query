@@ -29,6 +29,42 @@ Key | Description | Default
 
 ## Methods
 
+### Pagination
+
+- `$limit`: Limit the number of records returned
+- `$page`: Navigate to the records on the page
+
+```js
+{
+  $limit: 20,
+  $page: 3,
+}
+```
+
+- If we have 60 records and we limit the results to 20, the maximum number of
+  pages will be **3** (60÷20).
+- If we access page 4 the result will be an empty array
+### Sort
+
+We can sort returned records using the value of the `$sort` property:
+
+```js
+// ascendent
+{
+  $sort: 'name'
+}
+
+// descendent
+{
+  $sort: '-name'
+}
+
+// combinated
+{
+  $sort: '-name surname'
+}
+```
+
 ## Example
 
 This is a simple mongoose model for persons:
