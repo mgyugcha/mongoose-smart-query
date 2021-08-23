@@ -96,6 +96,17 @@ describe('mongoose-smart-query', () => {
 
   afterAll(() => Database.close())
 
+  describe('pipeline', () => {
+    it('sort', () => {
+      const pipeline = Persons.__smartQueryGetPipeline({
+        $sort: '-_id',
+        $fields: 'name bestFriend { name random }',
+      })
+      expect(pipeline).toHaveLength(6)
+      expect(pipeline[0]).toHaveProperty('$sort')
+    })
+  })
+
   describe('$limit', () => {
     it('limit to 2 results', async () => {
       const docs = await Persons.smartQuery({ $limit: 2 })

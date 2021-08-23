@@ -248,18 +248,36 @@ export default function (schema: any, {
         return $project
       }
 
-      function getSort () :[any?] {
+      function getSort (): {
+        $localSort?: Record<string, number>;
+        $foreignSort?: Record<string, number>;
+        } {
         if (!query[sortQueryName]) {
-          if (!defaultSort) return []
+          if (!defaultSort) return {}
           query[sortQueryName] = defaultSort
         }
         const regex = /(-)?([\w.]+)/g
-        const $sort: any = {}
+        const $localSort: Record<string, number> = {}
+        const $foreignSort: Record<string, number> = {}
         let matched
         while ((matched = regex.exec(query[sortQueryName])) !== null) {
-          $sort[matched[2]] = matched[1] ? -1 : 1
+          const order = matched[1]
+          const localfield = matched[2]
+          const path = !!schema.path(localfield)
+          if (path) {
+            $localSort[localfield] = order ? -1 : 1
+          } else {
+            $foreignSort[localfield] = order ? -1 : 1
+          }
         }
-        return [{ $sort }]
+        return {
+          $localSort: Object.keys($localSort).length !== 0
+            ? $localSort
+            : undefined,
+          $foreignSort: Object.keys($foreignSort).length !== 0
+            ? $foreignSort
+            : undefined,
+        }
       }
 
       function getLookups (project: any) {
@@ -291,14 +309,25 @@ export default function (schema: any, {
       const $match = getMatch()
       const $project = getFieldsProject(query)
       const lookups = getLookups($project)
-      let subPipeline
+      let subPipeline: any[]
       if (forCount) {
-        subPipeline = [{ $count: 'size' }]
-      } else {
         subPipeline = [
-          ...getSort(),
+          ...lookups,
+          ...getUnwind(),
+          ...$match,
+          { $count: 'size' },
+        ]
+      } else {
+        const sort = getSort()
+        subPipeline = [
+          ...sort.$localSort
+            ? [{ $sort: sort.$localSort }]
+            : [],
           { $skip: ($page - 1) * $limit },
           { $limit },
+          ...lookups,
+          ...getUnwind(),
+          ...$match,
         ]
         if (!((!originalQuery[fieldsQueryName] && getAllFieldsByDefault === true) ||
           query[allFieldsQueryName]?.toString() === 'true')) {
@@ -309,11 +338,6 @@ export default function (schema: any, {
           }
         }
       }
-      return [
-        ...lookups,
-        ...getUnwind(),
-        ...$match,
-        ...subPipeline,
-      ]
+      return subPipeline
     }
 }
