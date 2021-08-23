@@ -178,9 +178,11 @@ export default function (schema: any, {
       const $limit = parseInt(query[limitQueryName]) || defaultLimit
 
       function getDefault () {
-        const $match: TObject = {}
+        const $localMatch: TObject = {}
+        const $foreignMatch: Record<string, any> = {}
         for (const key in query) {
           const path = schema.path(key)
+          const $toAdd = path ? $localMatch : $foreignMatch
           if (!path && !key.includes('.')) { continue }
           const queryRegex = /(?:\{(\$?[\w ]+)\})?([^{}\n]+)/g
           let match
@@ -192,24 +194,24 @@ export default function (schema: any, {
             for (const [, operator, value] of values) {
               switch (operator) {
                 case '$exists':
-                  $match[key] = { $exists: value !== 'false' }
+                  $toAdd[key] = { $exists: value !== 'false' }
                   break
                 case '$includes':
-                  $match[key] = { $regex: RegExp(value.replace(/[^\w]/g, '.'), 'i') }
+                  $toAdd[key] = { $regex: RegExp(value.replace(/[^\w]/g, '.'), 'i') }
                   break
                 default: {
                   const parsedValue = parseValue(value, path?.instance)
                   if (operator) {
-                    if (typeof $match[key] === 'object') {
-                      $match[key][operator] = parsedValue
+                    if (typeof $toAdd[key] === 'object') {
+                      $toAdd[key][operator] = parsedValue
                     } else {
-                      $match[key] = { [operator]: parsedValue }
+                      $toAdd[key] = { [operator]: parsedValue }
                     }
                   } else {
                     if (typeof value === 'string' && value.includes('$exists')) {
-                      $match[key] = { $exists: true, $ne: [] }
+                      $toAdd[key] = { $exists: true, $ne: [] }
                     } else {
-                      $match[key] = parsedValue
+                      $toAdd[key] = parsedValue
                     }
                   }
                   break
@@ -217,25 +219,39 @@ export default function (schema: any, {
               }
             }
           } else {
-            $match[key] = parseValue(query[key], path?.instance)
+            $toAdd[key] = parseValue(query[key], path?.instance)
           }
         }
-        return $match
+        return { $localMatch, $foreignMatch }
       }
 
-      function getMatch () :[any?] {
-        let $queryMatch = {}
+      function getMatch () {
+        const $queryMatch: Record<string, any> = {}
+        const $foreignMatch: Record<string, any> = {}
         if (query[queryName] && fieldsForDefaultQuery) {
           const fields = fieldsForDefaultQuery.split(' ')
           const regex = { $regex: RegExp(query[queryName].replace(/[()[\]]/g, '.'), 'i') }
-          $queryMatch = { $or: fields.map(field => ({ [`${field}`]: regex })) }
+          for (const field of fields) {
+            const path = !!schema.path(field)
+            if (path) {
+              if (!$foreignMatch.$or) { $foreignMatch.$or = [] }
+              $foreignMatch.$or.push({ [`${field}`]: regex })
+            } else {
+              if (!$foreignMatch.$or) { $foreignMatch.$or = [] }
+              $foreignMatch.$or.push({ [`${field}`]: regex })
+            }
+          }
         }
         const $queryDefault = getDefault()
-        if (Object.keys($queryMatch).length === 0 &&
-        Object.keys($queryDefault).length === 0) {
-          return []
-        } else {
-          return [{ $match: { ...$queryMatch, ...$queryDefault } }]
+        return {
+          $queryMatch: {
+            ...$queryMatch,
+            ...$queryDefault.$localMatch,
+          },
+          $foreignMatch: {
+            ...$foreignMatch,
+            ...$queryDefault.$foreignMatch,
+          },
         }
       }
 
@@ -312,22 +328,32 @@ export default function (schema: any, {
       let subPipeline: any[]
       if (forCount) {
         subPipeline = [
+          ...Object.keys($match.$queryMatch).length !== 0
+            ? [{ $match: $match.$queryMatch }]
+            : [],
           ...lookups,
           ...getUnwind(),
-          ...$match,
+          ...Object.keys($match.$foreignMatch).length !== 0
+            ? [{ $match: $match.$foreignMatch }]
+            : [],
           { $count: 'size' },
         ]
       } else {
         const sort = getSort()
         subPipeline = [
+          ...Object.keys($match.$queryMatch).length !== 0
+            ? [{ $match: $match.$queryMatch }]
+            : [],
           ...sort.$localSort
             ? [{ $sort: sort.$localSort }]
             : [],
-          { $skip: ($page - 1) * $limit },
-          { $limit },
           ...lookups,
           ...getUnwind(),
-          ...$match,
+          ...Object.keys($match.$foreignMatch).length !== 0
+            ? [{ $match: $match.$foreignMatch }]
+            : [],
+          { $skip: ($page - 1) * $limit },
+          { $limit },
         ]
         if (!((!originalQuery[fieldsQueryName] && getAllFieldsByDefault === true) ||
           query[allFieldsQueryName]?.toString() === 'true')) {
