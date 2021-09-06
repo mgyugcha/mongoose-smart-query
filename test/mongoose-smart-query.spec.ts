@@ -235,6 +235,18 @@ describe('mongoose-smart-query', () => {
       })
     })
 
+    describe('$in', () => {
+      it('buscar en campo de string', async () => {
+        const docs = await Persons.smartQuery({ colours: '{$in}red' })
+        expect(docs).toHaveLength(2)
+      })
+
+      it('buscar en campo de número', async () => {
+        const docs = await Persons.smartQuery({ random: '{$in}18 ,1' })
+        expect(docs).toHaveLength(2)
+      })
+    })
+
     describe('with numbers', () => {
       it('operator $gt', async () => {
         const docs = await Persons.smartQuery({ random: '{$gt}18' })

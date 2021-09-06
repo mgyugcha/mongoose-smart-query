@@ -199,6 +199,12 @@ export default function (schema: any, {
                 case '$includes':
                   $toAdd[key] = { $regex: RegExp(value.replace(/[^\w]/g, '.'), 'i') }
                   break
+                case '$in': {
+                  const findin = value.split(',')
+                    .map(item => parseValue(item.trim(), path?.instance))
+                  $toAdd[key] = { $in: findin }
+                  break
+                }
                 default: {
                   const parsedValue = parseValue(value, path?.instance)
                   if (operator) {
