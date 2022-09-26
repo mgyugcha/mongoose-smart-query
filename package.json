@@ -1,6 +1,6 @@
 {
   "name": "mongoose-smart-query",
-  "version": "0.0.14",
+  "version": "0.1.0",
   "description": "Optimize rest requests",
   "main": "./dist/mongoose-smart-query.js",
   "types": "./dist/mongoose-smart-query.d.ts",
