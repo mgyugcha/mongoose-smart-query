@@ -5,8 +5,8 @@ const dbname = 'mongoose-smart-query-test'
 
 export default {
   async start () {
-    const uri = `mongodb://localhost:27017/${dbname}`
-    await connect(uri, { useNewUrlParser: true, useUnifiedTopology: true })
+    const uri = `mongodb://127.0.0.1:27018,127.0.0.1:27019/${dbname}?replicaSet=tocset`
+    await connect(uri)
     interface Person extends Document {
       name: string;
       random: number;

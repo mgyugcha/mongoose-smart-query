@@ -1,7 +1,5 @@
 import { Types } from 'mongoose'
 
-const { ObjectId } = Types
-
 interface PluginOptions {
   /**
    * Fields that should not be included in the query results. Default: `''`.
@@ -110,7 +108,7 @@ export function stringToQuery (query: string = '', value = '1') : object {
 function parseValue (value: any, instance: string) {
   switch (instance) {
     case 'ObjectID':
-      return ObjectId(value)
+      return new Types.ObjectId(value)
     case 'Date':
       return new Date(value)
     case 'Number':
