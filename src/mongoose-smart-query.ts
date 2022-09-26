@@ -248,9 +248,10 @@ export default function (
       const $foreignMatch: Record<string, any> = {}
       if (query[queryName] && fieldsForDefaultQuery) {
         const fields = fieldsForDefaultQuery.split(' ')
-        const regex = {
-          $regex: RegExp(query[queryName].replace(/[()[\]]/g, '.'), 'i'),
-        }
+        const regexParseado = query[queryName]
+          .replace(/[()[\\\]]/g, '.')
+          .replace(' ', '|')
+        const regex = { $regex: RegExp(regexParseado, 'i') }
         for (const field of fields) {
           const path = !!schema.path(field)
           if (path) {

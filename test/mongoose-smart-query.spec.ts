@@ -197,6 +197,14 @@ describe('mongoose-smart-query', () => {
       const docs = await Persons.smartQuery({ $q: "{)(&^%$][{}'.,;`~|/^" })
       expect(docs).toHaveLength(0)
     })
+    it('special and character', async () => {
+      const docs = await Persons.smartQuery({ $q: "\\" })
+      expect(docs).toHaveLength(4)
+    })
+    it('multiples palabras', async () => {
+      const docs = await Persons.smartQuery({ $q: "Luis Yugcha" })
+      expect(docs).toHaveLength(2)
+    })
   })
 
   describe('nested documents', () => {
