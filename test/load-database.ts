@@ -4,17 +4,17 @@ import { Types, connect, Schema, model, connection, Document } from 'mongoose'
 const dbname = 'mongoose-smart-query-test'
 
 export default {
-  async start () {
+  async start() {
     const uri = `mongodb://127.0.0.1:27018,127.0.0.1:27019/${dbname}?replicaSet=tocset`
     await connect(uri)
     interface Person extends Document {
-      name: string;
-      random: number;
-      birthday: Date;
-      colours: string[],
-      password: string;
-      useLinux?: boolean;
-      bestFriend?: Types.ObjectId,
+      name: string
+      random: number
+      birthday: Date
+      colours: string[]
+      password: string
+      useLinux?: boolean
+      bestFriend?: Types.ObjectId
     }
     const PersonSchema = new Schema<Person>({
       name: String,
@@ -69,7 +69,7 @@ export default {
       },
     ])
   },
-  async close () {
+  async close() {
     await connection.dropDatabase()
     connection.close()
   },
