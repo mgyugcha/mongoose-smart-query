@@ -110,6 +110,7 @@ export function stringToQuery(query: string = '', value = '1'): object {
 function parseValue(value: any, instance: string) {
   switch (instance) {
     case 'ObjectID':
+    case 'ObjectId':
       return new Types.ObjectId(value)
     case 'Date':
       return new Date(value)
