@@ -4,3 +4,5 @@ tsconfig.json
 *.tgz
 jest.config.json
 .github
+.eslint*
+.prettier*
