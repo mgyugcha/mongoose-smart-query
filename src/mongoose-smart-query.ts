@@ -211,11 +211,12 @@ export default function (
                   $regex: RegExp(value.replace(/[^\w]/g, '.'), 'i'),
                 }
                 break
-              case '$in': {
+              case '$in':
+              case '$nin': {
                 const findin = value
                   .split(',')
                   .map((item) => parseValue(item.trim(), path?.instance))
-                $toAdd[key] = { $in: findin }
+                $toAdd[key] = { [operator]: findin }
                 break
               }
               default: {

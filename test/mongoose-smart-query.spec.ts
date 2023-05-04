@@ -198,11 +198,11 @@ describe('mongoose-smart-query', () => {
       expect(docs).toHaveLength(0)
     })
     it('regex characters', async () => {
-      const docs = await Persons.smartQuery({ $q: "*Yugcha" })
+      const docs = await Persons.smartQuery({ $q: '*Yugcha' })
       expect(docs).toHaveLength(1)
     })
     it('special and character', async () => {
-      const docs = await Persons.smartQuery({ $q: "\\" })
+      const docs = await Persons.smartQuery({ $q: '\\' })
       expect(docs).toHaveLength(4)
     })
   })
@@ -284,6 +284,13 @@ describe('mongoose-smart-query', () => {
         const docs = await Persons.smartQuery({ random: '{$in}18 ,1' })
         expect(docs).toHaveLength(2)
       })
+
+      it('buscar por ObjectId', async () => {
+        const docs = await Persons.smartQuery({
+          _id: '{$nin}5cef28d32e950227cb5bfaa6,5cef28d32e950227cb5bfaa7',
+        })
+        expect(docs).toHaveLength(2)
+      })
     })
 
     describe('with numbers', () => {
@@ -325,6 +332,13 @@ describe('mongoose-smart-query', () => {
           birthday: '{$gte}1993-04-01T05:00:00.000Z',
         })
         expect(docs).toHaveLength(3)
+      })
+      it('operator $gte and $lte', async () => {
+        const docs = await Persons.smartQuery({
+          birthday:
+            '{$gte}1993-09-27T05:00:00.000Z{$lte}1995-01-12T05:00:00.000Z',
+        })
+        expect(docs).toHaveLength(2)
       })
     })
   })
