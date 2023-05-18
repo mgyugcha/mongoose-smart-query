@@ -451,4 +451,14 @@ describe('mongoose-smart-query', () => {
       expect(doc).toHaveProperty('useLinux')
     })
   })
+
+  describe('operator $or', () => {
+    it('búsqueda con $or', async () => {
+      const docs = await Persons.smartQuery({
+        random: '{$or}25',
+        name: '{$or}Luis Ñandú',
+      })
+      expect(docs).toHaveLength(2)
+    })
+  })
 })

@@ -1,4 +1,4 @@
-import { Types } from 'mongoose'
+import { Schema, Types } from 'mongoose'
 
 interface PluginOptions {
   /**
@@ -145,7 +145,7 @@ export function removeKeys(initial: TObject, toRemove: TObject): TObject {
 }
 
 export default function (
-  schema: any,
+  schema: Schema,
   {
     protectedFields = '',
     defaultFields = '_id',
@@ -164,12 +164,16 @@ export default function (
 ) {
   const __protected = stringToQuery(protectedFields)
 
-  schema.statics.smartQuery = function (query: { [key: string]: string } = {}) {
+  schema.statics.smartQuery = function (
+    this: any,
+    query: { [key: string]: string } = {},
+  ) {
     const pipeline = this.__smartQueryGetPipeline({ ...query })
     return this.aggregate(pipeline)
   }
 
   schema.statics.smartCount = async function (
+    this: any,
     query: { [key: string]: string } = {},
   ) {
     const pipeline = this.__smartQueryGetPipeline({ ...query }, true)
@@ -179,35 +183,40 @@ export default function (
 
   schema.statics.__smartQueryGetPipeline = function (
     query: { [key: string]: string },
-    forCount: boolean = false,
+    forCount = false,
   ) {
-    const originalQuery = JSON.parse(JSON.stringify(query))
+    const originalQuery: { [key: string]: string } = JSON.parse(
+      JSON.stringify(query),
+    )
     const $page = parseInt(query[pageQueryName]) || 1
     const $limit = parseInt(query[limitQueryName]) || defaultLimit
 
-    function getDefault() {
+    const getDefault = () => {
       const $localMatch: TObject = {}
       const $foreignMatch: Record<string, any> = {}
+      const $or: unknown[] = []
       for (const key in query) {
         const path = schema.path(key)
+        if (!path && !key.includes('.')) continue
         const $toAdd = path ? $localMatch : $foreignMatch
-        if (!path && !key.includes('.')) {
-          continue
-        }
         const queryRegex = /(?:\{(\$?[\w ]+)\})?([^{}\n]+)/g
         let match
-        const values = []
+        const values: Array<[string, string, string]> = []
         if (typeof query[key] === 'string') {
-          while ((match = queryRegex.exec(query[key])) !== null) {
+          const $filtroActual: Record<string, any> = {}
+          let valor = query[key]
+          const tieneOperadorOr = valor.startsWith('{$or}')
+          if (tieneOperadorOr) valor = valor.replace('{$or}', '')
+          while ((match = queryRegex.exec(valor)) !== null) {
             values.push([match[0], match[1], match[2]])
           }
           for (const [, operator, value] of values) {
             switch (operator) {
               case '$exists':
-                $toAdd[key] = { $exists: value !== 'false' }
+                $filtroActual[key] = { $exists: value !== 'false' }
                 break
               case '$includes':
-                $toAdd[key] = {
+                $filtroActual[key] = {
                   $regex: RegExp(value.replace(/[^\w]/g, '.'), 'i'),
                 }
                 break
@@ -216,36 +225,42 @@ export default function (
                 const findin = value
                   .split(',')
                   .map((item) => parseValue(item.trim(), path?.instance))
-                $toAdd[key] = { [operator]: findin }
+                $filtroActual[key] = { [operator]: findin }
                 break
               }
               default: {
                 const parsedValue = parseValue(value, path?.instance)
                 if (operator) {
-                  if (typeof $toAdd[key] === 'object') {
-                    $toAdd[key][operator] = parsedValue
+                  if (typeof $filtroActual[key] === 'object') {
+                    $filtroActual[key][operator] = parsedValue
                   } else {
-                    $toAdd[key] = { [operator]: parsedValue }
+                    $filtroActual[key] = { [operator]: parsedValue }
                   }
                 } else {
                   if (typeof value === 'string' && value.includes('$exists')) {
-                    $toAdd[key] = { $exists: true, $ne: [] }
+                    $filtroActual[key] = { $exists: true, $ne: [] }
                   } else {
-                    $toAdd[key] = parsedValue
+                    $filtroActual[key] = parsedValue
                   }
                 }
                 break
               }
             }
           }
+          if (tieneOperadorOr) {
+            $or.push($filtroActual)
+          } else {
+            Object.assign($toAdd, $filtroActual)
+          }
         } else {
           $toAdd[key] = parseValue(query[key], path?.instance)
         }
       }
+      if ($or.length !== 0) $localMatch.$or = $or
       return { $localMatch, $foreignMatch }
     }
 
-    function getMatch() {
+    const getMatch = () => {
       const $queryMatch: Record<string, any> = {}
       const $foreignMatch: Record<string, any> = {}
       if (query[queryName] && fieldsForDefaultQuery) {
