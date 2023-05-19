@@ -283,6 +283,19 @@ export default function (
         }
       }
       const $queryDefault = getDefault()
+      const $or =
+        $queryDefault.$localMatch.$or || $queryDefault.$foreignMatch.$or
+      if ($or) {
+        delete $queryDefault.$localMatch.$or
+        delete $queryDefault.$foreignMatch.$or
+        if (Array.isArray($queryMatch.$or)) {
+          $queryMatch.$or = $queryMatch.$or.concat($or)
+        } else if (Array.isArray($foreignMatch.$or)) {
+          $foreignMatch.$or = $foreignMatch.$or.concat($or)
+        } else {
+          $queryMatch.$or = $or
+        }
+      }
       return {
         $queryMatch: {
           ...$queryMatch,

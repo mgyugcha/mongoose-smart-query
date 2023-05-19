@@ -460,5 +460,12 @@ describe('mongoose-smart-query', () => {
       })
       expect(docs).toHaveLength(2)
     })
+    it('búsqueda con $or y $q', async () => {
+      const docs = await Persons.smartQuery({
+        $q: 'Yugcha',
+        name: '{$or}Luis Ñandú',
+      })
+      expect(docs).toHaveLength(2)
+    })
   })
 })
