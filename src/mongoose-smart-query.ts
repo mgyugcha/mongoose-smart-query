@@ -1,4 +1,15 @@
-import { Schema, Types } from 'mongoose'
+import { Schema, Types, connection } from 'mongoose'
+
+interface LookupConfirmado {
+  field: string
+  from: string
+  project: any
+}
+
+type QueryForeign = Record<
+  string,
+  { collection: string; query: Record<string, any> }
+>
 
 interface PluginOptions {
   /**
@@ -65,7 +76,7 @@ interface TObject {
  * @param $project The $project's pipeline that can contains possible $lookup.
  * @returns An array with the fields with a possible $lookup.
  */
-export function getListOfPossibleLookups($project: any): string[] {
+export const getListOfPossibleLookups = ($project: any): string[] => {
   let keys: string[] = []
   for (const key in $project) {
     if (typeof $project[key] === 'object') {
@@ -164,24 +175,49 @@ export default function (
 ) {
   const __protected = stringToQuery(protectedFields)
 
-  schema.statics.smartQuery = function (
+  schema.statics.smartQuery = async function (
     this: any,
     query: { [key: string]: string } = {},
   ) {
-    const pipeline = this.__smartQueryGetPipeline({ ...query })
-    return this.aggregate(pipeline)
+    const {
+      pipeline,
+      lookupsConfirmados,
+    }: { pipeline: any[]; lookupsConfirmados: LookupConfirmado[] } =
+      await this.__smartQueryGetPipeline({ ...query })
+    const dd: any[] = await this.aggregate(pipeline)
+    const foraneos = await Promise.all(
+      lookupsConfirmados.map((item) => {
+        const ids = dd.filter((x) => x[item.field]).map((x) => x[item.field])
+        return connection
+          .collection(item.from)
+          .find({ _id: { $in: ids } })
+          .project(item.project)
+          .toArray()
+      }),
+    )
+    for (const index in lookupsConfirmados) {
+      const docs = foraneos[index]
+      const confirmado = lookupsConfirmados[index]
+      for (const doc of dd) {
+        doc[confirmado.field] = docs.find((item) =>
+          item._id.equals(doc[confirmado.field]),
+        )
+      }
+    }
+
+    return dd
   }
 
   schema.statics.smartCount = async function (
     this: any,
     query: { [key: string]: string } = {},
   ) {
-    const pipeline = this.__smartQueryGetPipeline({ ...query }, true)
+    const { pipeline } = await this.__smartQueryGetPipeline({ ...query }, true)
     const result = await this.aggregate(pipeline)
     return result.length === 0 ? 0 : result[0].size
   }
 
-  schema.statics.__smartQueryGetPipeline = function (
+  schema.statics.__smartQueryGetPipeline = async function (
     query: { [key: string]: string },
     forCount = false,
   ) {
@@ -191,20 +227,65 @@ export default function (
     const $page = parseInt(query[pageQueryName]) || 1
     const $limit = parseInt(query[limitQueryName]) || defaultLimit
 
-    const getDefault = () => {
+    const getDefault = async (queryLookup: QueryForeign) => {
       const $localMatch: TObject = {}
       const $foreignMatch: Record<string, any> = {}
+      const lookupFinalMatch: Record<
+        string,
+        { collection: string; $match: Record<string, any> }
+      > = {}
       const $or: unknown[] = []
-      for (const key in query) {
-        const path = schema.path(key)
-        if (!path && !key.includes('.')) continue
-        const $toAdd = path ? $localMatch : $foreignMatch
+      for (const keyInicial in query) {
+        const path = schema.path(keyInicial)
+        if (!path && !keyInicial.includes('.')) continue
+        let key = keyInicial
+        let lookupKey: string | undefined
+        const valorQuery = query[key]
+        if (keyInicial.includes('.')) {
+          const [keyForanea, subKey] = keyInicial.split('.')
+          const foraneaKey = schema.path(keyForanea)
+          if (foraneaKey && foraneaKey.options.ref) {
+            key = subKey
+            lookupKey = keyForanea
+            lookupFinalMatch[lookupKey] = {
+              collection: foraneaKey.options.ref,
+              $match: {},
+            }
+          }
+        }
+        // if (!path) {
+        // if (key.includes('.')) {
+        //   const [subField, busqueda] = key.split('.')
+        //   const subpath = schema.path(subField)
+        //   if (subpath && subpath.options.ref) {
+        //     queryLookup[key] = {
+        //       collection: subpath.options.ref,
+        //       query: { [busqueda]: regex },
+        //     }
+        //     // const docs = await connection
+        //     //   .collection(subpath.options.ref)
+        //     //   .find({ [busqueda]: regex })
+        //     //   .project({ _id: 1 })
+        //     //   .toArray()
+        //     // const idsDocs = docs.map((item) => item._id)
+        //     // if (idsDocs.length)
+        //     //   $queryMatch.$or.push({ [field]: { $in: idsDocs } })
+        //   }
+        // } else {
+        //   continue
+        // }
+        // }
+        const $toAdd = lookupKey
+          ? lookupFinalMatch[lookupKey].$match
+          : path
+          ? $localMatch
+          : $foreignMatch
         const queryRegex = /(?:\{(\$?[\w ]+)\})?([^{}\n]+)/g
         let match
         const values: Array<[string, string, string]> = []
-        if (typeof query[key] === 'string') {
+        if (typeof valorQuery === 'string') {
           const $filtroActual: Record<string, any> = {}
-          let valor = query[key]
+          let valor = valorQuery
           const tieneOperadorOr = valor.startsWith('{$or}')
           if (tieneOperadorOr) valor = valor.replace('{$or}', '')
           while ((match = queryRegex.exec(valor)) !== null) {
@@ -253,36 +334,72 @@ export default function (
             Object.assign($toAdd, $filtroActual)
           }
         } else {
-          $toAdd[key] = parseValue(query[key], path?.instance)
+          $toAdd[key] = parseValue(valorQuery, path?.instance)
         }
       }
       if ($or.length !== 0) $localMatch.$or = $or
+      if (Object.keys(lookupFinalMatch).length !== 0) {
+        await Promise.all(
+          Object.entries(lookupFinalMatch).map(async ([key, value]) => {
+            const docs = await connection
+              .collection(value.collection)
+              .find(value.$match)
+              .project({ _id: 1 })
+              .toArray()
+            $localMatch[key] = { $in: docs.map((item) => item._id) }
+          }),
+        )
+      }
       return { $localMatch, $foreignMatch }
     }
 
-    const getMatch = () => {
+    const getMatch = async () => {
+      const queryLookup: QueryForeign = {}
       const $queryMatch: Record<string, any> = {}
       const $foreignMatch: Record<string, any> = {}
+      const _lookupsMatch: Record<
+        string,
+        { collection: string; $match: Record<string, any> }
+      > = {}
       if (query[queryName] && fieldsForDefaultQuery) {
         const fields = fieldsForDefaultQuery.split(' ')
         const regexParseado = query[queryName].replace(/[()[\\\]*]/g, '.')
         const regex = { $regex: RegExp(regexParseado, 'i') }
         for (const field of fields) {
-          const path = !!schema.path(field)
+          const path = schema.path(field)
           if (path) {
-            if (!$foreignMatch.$or) {
-              $foreignMatch.$or = []
+            if (!$queryMatch.$or) $queryMatch.$or = []
+            $queryMatch.$or.push({ [field]: regex })
+          } else if (field.includes('.')) {
+            const [subField, busqueda] = field.split('.')
+            const subpath = schema.path(subField)
+            if (subpath && subpath.options.ref) {
+              if (!_lookupsMatch[subField])
+                _lookupsMatch[subField] = {
+                  collection: subpath.options.ref,
+                  $match: { $or: [{ [busqueda]: regex }] },
+                }
+              else
+                _lookupsMatch[subField].$match.$or.push({ [busqueda]: regex })
             }
-            $foreignMatch.$or.push({ [`${field}`]: regex })
-          } else {
-            if (!$foreignMatch.$or) {
-              $foreignMatch.$or = []
-            }
-            $foreignMatch.$or.push({ [`${field}`]: regex })
           }
         }
+        if (Object.keys(_lookupsMatch).length !== 0) {
+          await Promise.all(
+            Object.entries(_lookupsMatch).map(async ([key, value]) => {
+              const docs = await connection
+                .collection(value.collection)
+                .find(value.$match)
+                .project({ _id: 1 })
+                .toArray()
+              const idsDocs = docs.map((item) => item._id)
+              if (idsDocs.length)
+                $queryMatch.$or.push({ [key]: { $in: idsDocs } })
+            }),
+          )
+        }
       }
-      const $queryDefault = getDefault()
+      const $queryDefault = await getDefault(queryLookup)
       const $or =
         $queryDefault.$localMatch.$or || $queryDefault.$foreignMatch.$or
       if ($or) {
@@ -296,6 +413,15 @@ export default function (
           $queryMatch.$or = $or
         }
       }
+      console.log(
+        'query',
+        $queryDefault,
+        $queryMatch,
+        $queryMatch.$or,
+        $queryDefault.$localMatch,
+        $foreignMatch,
+        $queryDefault.$foreignMatch,
+      )
       return {
         $queryMatch: {
           ...$queryMatch,
@@ -347,53 +473,64 @@ export default function (
       }
     }
 
-    function getLookups(project: any) {
-      const lookups: [any?] = []
-      getListOfPossibleLookups(project).forEach((localField) => {
-        const path = schema.path(localField)
-        if (!path || !path.options.ref) return
-        const { ref: from } = path.options
-        lookups.push(
-          {
-            $lookup: { from, localField, foreignField: '_id', as: localField },
-          },
-          {
-            $unwind: {
-              path: `$${localField}`,
-              preserveNullAndEmptyArrays: true,
+    const getUnwind = () => {
+      return !query[unwindName]
+        ? []
+        : [
+            {
+              $unwind: {
+                path: `$${query[unwindName]}`,
+                preserveNullAndEmptyArrays: true,
+              },
             },
-          },
-        )
-      })
-      return lookups
+          ]
     }
 
-    function getUnwind() {
-      if (!query[unwindName]) return []
-      return [
-        {
-          $unwind: {
-            path: `$${query[unwindName]}`,
-            preserveNullAndEmptyArrays: true,
-          },
-        },
-      ]
-    }
-
-    const $match = getMatch()
+    const $match = await getMatch()
     const $project = getFieldsProject(query)
-    const lookups = getLookups($project)
+
+    const lookupsConfirmados = getListOfPossibleLookups($project).reduce<
+      LookupConfirmado[]
+    >((acc, localField) => {
+      const path = schema.path(localField)
+      if (!path || !path.options.ref) return acc
+      const project = Object.keys($project || {}).reduce<Record<string, 1>>(
+        (acc, key) => {
+          if (key.startsWith(localField + '.')) {
+            const [, path] = key.split('.')
+            acc[path] = 1
+            return acc
+          } else if (
+            key.startsWith(localField) &&
+            typeof $project![localField] === 'object'
+          ) {
+            return $project![localField]
+          } else {
+            return acc
+          }
+        },
+        {},
+      )
+      return acc.concat([
+        {
+          field: localField,
+          from: path.options.ref,
+          project,
+        },
+      ])
+    }, [])
+
     let subPipeline: any[]
     if (forCount) {
       subPipeline = [
         ...(Object.keys($match.$queryMatch).length !== 0
           ? [{ $match: $match.$queryMatch }]
           : []),
-        ...lookups,
+        // ...lookups,
         ...getUnwind(),
-        ...(Object.keys($match.$foreignMatch).length !== 0
-          ? [{ $match: $match.$foreignMatch }]
-          : []),
+        // ...(Object.keys($match.$foreignMatch).length !== 0
+        //   ? [{ $match: $match.$foreignMatch }]
+        //   : []),
         { $count: 'size' },
       ]
     } else {
@@ -403,11 +540,11 @@ export default function (
           ? [{ $match: $match.$queryMatch }]
           : []),
         ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
-        ...lookups,
+        // ...lookups,
         ...getUnwind(),
-        ...(Object.keys($match.$foreignMatch).length !== 0
-          ? [{ $match: $match.$foreignMatch }]
-          : []),
+        // ...(Object.keys($match.$foreignMatch).length !== 0
+        //   ? [{ $match: $match.$foreignMatch }]
+        //   : []),
         { $skip: ($page - 1) * $limit },
         { $limit },
       ]
@@ -417,13 +554,21 @@ export default function (
           query[allFieldsQueryName]?.toString() === 'true'
         )
       ) {
-        subPipeline.push({ $project })
+        const tmpProject = { ...$project }
+        for (const lookup of lookupsConfirmados) {
+          for (const keyP in tmpProject) {
+            if (keyP.includes(lookup.field + '.')) delete tmpProject[keyP]
+          }
+          tmpProject![lookup.field] = 1
+        }
+        subPipeline.push({ $project: tmpProject })
       } else {
         if (protectedFields) {
           subPipeline.push({ $project: stringToQuery(protectedFields, '0') })
         }
       }
     }
-    return subPipeline
+    console.log('subPipeline', subPipeline)
+    return { pipeline: subPipeline, $project, lookupsConfirmados }
   }
 }
