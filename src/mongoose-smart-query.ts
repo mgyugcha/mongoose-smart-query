@@ -184,13 +184,16 @@ export default function (
       lookupsConfirmados,
     }: { pipeline: any[]; lookupsConfirmados: LookupConfirmado[] } =
       await this.__smartQueryGetPipeline({ ...query })
+    const queryEmpresa = query.business
+      ? { business: new Types.ObjectId(query.business) }
+      : {}
     const dd: any[] = await this.aggregate(pipeline)
     const foraneos = await Promise.all(
       lookupsConfirmados.map((item) => {
         const ids = dd.filter((x) => x[item.field]).map((x) => x[item.field])
         return connection
           .collection(item.from)
-          .find({ _id: { $in: ids } })
+          .find({ _id: { $in: ids }, ...queryEmpresa })
           .project(item.project)
           .toArray()
       }),
@@ -221,6 +224,9 @@ export default function (
     query: { [key: string]: string },
     forCount = false,
   ) {
+    const queryEmpresa = query.business
+      ? { business: new Types.ObjectId(query.business) }
+      : {}
     const originalQuery: { [key: string]: string } = JSON.parse(
       JSON.stringify(query),
     )
@@ -253,28 +259,6 @@ export default function (
             }
           }
         }
-        // if (!path) {
-        // if (key.includes('.')) {
-        //   const [subField, busqueda] = key.split('.')
-        //   const subpath = schema.path(subField)
-        //   if (subpath && subpath.options.ref) {
-        //     queryLookup[key] = {
-        //       collection: subpath.options.ref,
-        //       query: { [busqueda]: regex },
-        //     }
-        //     // const docs = await connection
-        //     //   .collection(subpath.options.ref)
-        //     //   .find({ [busqueda]: regex })
-        //     //   .project({ _id: 1 })
-        //     //   .toArray()
-        //     // const idsDocs = docs.map((item) => item._id)
-        //     // if (idsDocs.length)
-        //     //   $queryMatch.$or.push({ [field]: { $in: idsDocs } })
-        //   }
-        // } else {
-        //   continue
-        // }
-        // }
         const $toAdd = lookupKey
           ? lookupFinalMatch[lookupKey].$match
           : path
@@ -343,7 +327,7 @@ export default function (
           Object.entries(lookupFinalMatch).map(async ([key, value]) => {
             const docs = await connection
               .collection(value.collection)
-              .find(value.$match)
+              .find({ ...value.$match, ...queryEmpresa })
               .project({ _id: 1 })
               .toArray()
             $localMatch[key] = { $in: docs.map((item) => item._id) }
@@ -389,7 +373,7 @@ export default function (
             Object.entries(_lookupsMatch).map(async ([key, value]) => {
               const docs = await connection
                 .collection(value.collection)
-                .find(value.$match)
+                .find({ ...value.$match, ...queryEmpresa })
                 .project({ _id: 1 })
                 .toArray()
               const idsDocs = docs.map((item) => item._id)
