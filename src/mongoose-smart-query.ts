@@ -8,7 +8,7 @@ interface LookupConfirmado {
 
 type QueryForeign = Record<
   string,
-  { collection: string; query: Record<string, any> }
+  { collection: string; $match: Record<string, any> }
 >
 
 interface PluginOptions {
@@ -233,13 +233,9 @@ export default function (
     const $page = parseInt(query[pageQueryName]) || 1
     const $limit = parseInt(query[limitQueryName]) || defaultLimit
 
-    const getDefault = async (queryLookup: QueryForeign) => {
+    const getDefault = async () => {
       const $localMatch: TObject = {}
-      const $foreignMatch: Record<string, any> = {}
-      const lookupFinalMatch: Record<
-        string,
-        { collection: string; $match: Record<string, any> }
-      > = {}
+      const lookupFinalMatch: QueryForeign = {}
       const $or: unknown[] = []
       for (const keyInicial in query) {
         const path = schema.path(keyInicial)
@@ -261,9 +257,7 @@ export default function (
         }
         const $toAdd = lookupKey
           ? lookupFinalMatch[lookupKey].$match
-          : path
-          ? $localMatch
-          : $foreignMatch
+          : $localMatch
         const queryRegex = /(?:\{(\$?[\w ]+)\})?([^{}\n]+)/g
         let match
         const values: Array<[string, string, string]> = []
@@ -334,17 +328,12 @@ export default function (
           }),
         )
       }
-      return { $localMatch, $foreignMatch }
+      return $localMatch
     }
 
     const getMatch = async () => {
-      const queryLookup: QueryForeign = {}
       const $queryMatch: Record<string, any> = {}
-      const $foreignMatch: Record<string, any> = {}
-      const _lookupsMatch: Record<
-        string,
-        { collection: string; $match: Record<string, any> }
-      > = {}
+      const _lookupsMatch: QueryForeign = {}
       if (query[queryName] && fieldsForDefaultQuery) {
         const fields = fieldsForDefaultQuery.split(' ')
         const regexParseado = query[queryName].replace(/[()[\\\]*]/g, '.')
@@ -383,39 +372,17 @@ export default function (
           )
         }
       }
-      const $queryDefault = await getDefault(queryLookup)
-      const $or =
-        $queryDefault.$localMatch.$or || $queryDefault.$foreignMatch.$or
+      const $queryDefault = await getDefault()
+      const $or = $queryDefault.$or
       if ($or) {
-        delete $queryDefault.$localMatch.$or
-        delete $queryDefault.$foreignMatch.$or
+        delete $queryDefault.$or
         if (Array.isArray($queryMatch.$or)) {
           $queryMatch.$or = $queryMatch.$or.concat($or)
-        } else if (Array.isArray($foreignMatch.$or)) {
-          $foreignMatch.$or = $foreignMatch.$or.concat($or)
         } else {
           $queryMatch.$or = $or
         }
       }
-      console.log(
-        'query',
-        $queryDefault,
-        $queryMatch,
-        $queryMatch.$or,
-        $queryDefault.$localMatch,
-        $foreignMatch,
-        $queryDefault.$foreignMatch,
-      )
-      return {
-        $queryMatch: {
-          ...$queryMatch,
-          ...$queryDefault.$localMatch,
-        },
-        $foreignMatch: {
-          ...$foreignMatch,
-          ...$queryDefault.$foreignMatch,
-        },
-      }
+      return { ...$queryMatch, ...$queryDefault }
     }
 
     function getFieldsProject(query: TObject): TObject | undefined {
@@ -504,31 +471,19 @@ export default function (
       ])
     }, [])
 
-    let subPipeline: any[]
+    let pipeline: any[]
     if (forCount) {
-      subPipeline = [
-        ...(Object.keys($match.$queryMatch).length !== 0
-          ? [{ $match: $match.$queryMatch }]
-          : []),
-        // ...lookups,
+      pipeline = [
+        ...(Object.keys($match).length !== 0 ? [{ $match }] : []),
         ...getUnwind(),
-        // ...(Object.keys($match.$foreignMatch).length !== 0
-        //   ? [{ $match: $match.$foreignMatch }]
-        //   : []),
         { $count: 'size' },
       ]
     } else {
       const sort = getSort()
-      subPipeline = [
-        ...(Object.keys($match.$queryMatch).length !== 0
-          ? [{ $match: $match.$queryMatch }]
-          : []),
+      pipeline = [
+        ...(Object.keys($match).length !== 0 ? [{ $match }] : []),
         ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
-        // ...lookups,
         ...getUnwind(),
-        // ...(Object.keys($match.$foreignMatch).length !== 0
-        //   ? [{ $match: $match.$foreignMatch }]
-        //   : []),
         { $skip: ($page - 1) * $limit },
         { $limit },
       ]
@@ -545,14 +500,13 @@ export default function (
           }
           tmpProject![lookup.field] = 1
         }
-        subPipeline.push({ $project: tmpProject })
+        pipeline.push({ $project: tmpProject })
       } else {
         if (protectedFields) {
-          subPipeline.push({ $project: stringToQuery(protectedFields, '0') })
+          pipeline.push({ $project: stringToQuery(protectedFields, '0') })
         }
       }
     }
-    console.log('subPipeline', subPipeline)
-    return { pipeline: subPipeline, $project, lookupsConfirmados }
+    return { pipeline, lookupsConfirmados }
   }
 }

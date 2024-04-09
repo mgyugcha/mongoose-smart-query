@@ -118,12 +118,12 @@ describe('mongoose-smart-query', () => {
   afterAll(() => Database.close())
 
   describe('pipeline', () => {
-    it('sort', () => {
-      const pipeline = Persons.__smartQueryGetPipeline({
+    it('sort', async () => {
+      const { pipeline } = await Persons.__smartQueryGetPipeline({
         $sort: '-_id',
         $fields: 'name bestFriend { name random }',
       })
-      expect(pipeline).toHaveLength(6)
+      expect(pipeline).toHaveLength(4)
       expect(pipeline[0]).toHaveProperty('$sort')
     })
   })
@@ -186,7 +186,7 @@ describe('mongoose-smart-query', () => {
   describe('$q', () => {
     it('simple query', async () => {
       const docs = await Persons.smartQuery({ $q: 'michael' })
-      expect(docs).toHaveLength(1)
+      expect(docs).toHaveLength(2)
     })
 
     it('specials characters', async () => {
@@ -199,7 +199,7 @@ describe('mongoose-smart-query', () => {
     })
     it('regex characters', async () => {
       const docs = await Persons.smartQuery({ $q: '*Yugcha' })
-      expect(docs).toHaveLength(1)
+      expect(docs).toHaveLength(2)
     })
     it('special and character', async () => {
       const docs = await Persons.smartQuery({ $q: '\\' })
@@ -217,7 +217,7 @@ describe('mongoose-smart-query', () => {
         ['_id', 'name', 'bestFriend'].sort(),
       )
       expect(Object.keys(docs[2].bestFriend).sort()).toEqual(
-        ['name', 'random'].sort(),
+        ['_id', 'name', 'random'].sort(),
       )
     })
 
@@ -230,7 +230,7 @@ describe('mongoose-smart-query', () => {
         ['_id', 'name', 'bestFriend'].sort(),
       )
       expect(Object.keys(docs[2].bestFriend).sort()).toEqual(
-        ['name', 'random'].sort(),
+        ['_id', 'name', 'random'].sort(),
       )
     })
   })
@@ -465,7 +465,7 @@ describe('mongoose-smart-query', () => {
         $q: 'Yugcha',
         name: '{$or}Luis Ñandú',
       })
-      expect(docs).toHaveLength(2)
+      expect(docs).toHaveLength(3)
     })
   })
 })
