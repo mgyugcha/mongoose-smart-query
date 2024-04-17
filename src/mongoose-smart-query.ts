@@ -70,28 +70,24 @@ interface TObject {
   [value: string]: any
 }
 
-/**
- * Gets a list of possible fields that could allow a $lookup. This list is
- * obtained from the nested fields of the object.
- * @param $project The $project's pipeline that can contains possible $lookup.
- * @returns An array with the fields with a possible $lookup.
- */
-export const getListOfPossibleLookups = ($project: any): string[] => {
-  let keys: string[] = []
-  for (const key in $project) {
-    if (typeof $project[key] === 'object') {
-      keys.push(key)
-      const subkeys = getListOfPossibleLookups($project[key])
-      keys = keys.concat(subkeys.map((subkey) => key + '.' + subkey))
-    } else if (key.includes('.')) {
-      const splited = key.split(/\.(.+)/)
-      keys.push(splited[0])
-      continue
+const reemplazarSubdoc = (data: TObject, path: string, reemplazo?: unknown) => {
+  if (!reemplazo) return
+  let tmp = data
+  const campos = path.split('.')
+  campos.forEach((campo, index) => {
+    if (index === campos.length - 1) {
+      if (tmp?.[campo]) tmp[campo] = reemplazo
     } else {
-      continue
+      tmp = tmp?.[campo]
     }
-  }
-  return keys
+  })
+}
+
+const getCampo = (data: TObject, path: string) => {
+  let tmp = data
+  const campos = path.split('.')
+  campos.forEach((campo) => (tmp = tmp?.[campo]))
+  return tmp
 }
 
 /**
@@ -175,6 +171,81 @@ export default function (
 ) {
   const __protected = stringToQuery(protectedFields)
 
+  /**
+   * Gets a list of possible fields that could allow a $lookup. This list is
+   * obtained from the nested fields of the object.
+   * @param $project The $project's pipeline that can contains possible $lookup.
+   * @returns An array with the fields with a possible $lookup.
+   */
+  const getListOfPossibleLookups = (
+    $project: TObject = {},
+    padre = '',
+  ): LookupConfirmado[] => {
+    padre &&= padre + '.'
+    const confirmados: LookupConfirmado[] = []
+    const addCampos = (field: string, from: string, project: TObject) => {
+      const existente = confirmados.find((item) => item.field === field)
+      if (existente) {
+        existente.project = { ...existente.project, ...project }
+      } else {
+        confirmados.push({ field, from, project })
+      }
+    }
+
+    for (const key in $project) {
+      if (typeof $project[key] === 'object') {
+        const path = schema.path(padre + key)
+        if (path && path.options.ref) {
+          addCampos(padre + key, path.options.ref, $project[key])
+        } else {
+          const subkeys = getListOfPossibleLookups($project[key], padre + key)
+          subkeys.forEach((result) => {
+            addCampos(result.field, result.from, result.project)
+          })
+        }
+      } else if (key.includes('.') || padre) {
+        const splited = key.split(/\.(.+)/)
+        const path = schema.path(padre + splited[0])
+        if (path && path.options.ref) {
+          const existente = confirmados.find(
+            (item) => item.field === splited[0],
+          )
+          if (existente) {
+            existente.project[splited[1]] = 1
+          } else {
+            confirmados.push({
+              field: splited[0],
+              from: path.options.ref,
+              project: { [splited[1]]: 1 },
+            })
+          }
+        }
+        continue
+      } else {
+        continue
+      }
+    }
+    return confirmados
+  }
+
+  const asignarLookups = (
+    lookup: TObject = {},
+    confirmados: LookupConfirmado[],
+  ) => {
+    for (const confirmado of confirmados) {
+      if (confirmado.field.includes('.') || lookup[confirmado.field]) {
+        reemplazarSubdoc(lookup, confirmado.field, 1)
+      } else {
+        for (const key in lookup) {
+          if (key.startsWith(confirmado.field + '.')) {
+            delete lookup[key]
+            lookup[confirmado.field] = 1
+          }
+        }
+      }
+    }
+  }
+
   schema.statics.smartQuery = async function (
     this: any,
     query: { [key: string]: string } = {},
@@ -190,21 +261,31 @@ export default function (
     const dd: any[] = await this.aggregate(pipeline)
     const foraneos = await Promise.all(
       lookupsConfirmados.map((item) => {
-        const ids = dd.filter((x) => x[item.field]).map((x) => x[item.field])
-        return connection
-          .collection(item.from)
-          .find({ _id: { $in: ids }, ...queryEmpresa })
-          .project(item.project)
-          .toArray()
+        const ids = dd.reduce((acc, val) => {
+          const valor = getCampo(val, item.field)
+          if (valor) acc.push(valor)
+          return acc
+        }, [])
+        return ids.length !== 0
+          ? connection
+              .collection(item.from)
+              .find({ _id: { $in: ids }, ...queryEmpresa })
+              .project(item.project)
+              .toArray()
+          : []
       }),
     )
     for (const index in lookupsConfirmados) {
       const docs = foraneos[index]
       const confirmado = lookupsConfirmados[index]
       for (const doc of dd) {
-        doc[confirmado.field] = docs.find((item) =>
-          item._id.equals(doc[confirmado.field]),
-        )
+        const keyPrincipal = getCampo(doc, confirmado.field)
+        if (keyPrincipal)
+          reemplazarSubdoc(
+            doc,
+            confirmado.field,
+            docs.find((item) => item._id.equals(keyPrincipal)),
+          )
       }
     }
 
@@ -440,36 +521,7 @@ export default function (
     const $match = await getMatch()
     const $project = getFieldsProject(query)
 
-    const lookupsConfirmados = getListOfPossibleLookups($project).reduce<
-      LookupConfirmado[]
-    >((acc, localField) => {
-      const path = schema.path(localField)
-      if (!path || !path.options.ref) return acc
-      const project = Object.keys($project || {}).reduce<Record<string, 1>>(
-        (acc, key) => {
-          if (key.startsWith(localField + '.')) {
-            const [, path] = key.split('.')
-            acc[path] = 1
-            return acc
-          } else if (
-            key.startsWith(localField) &&
-            typeof $project![localField] === 'object'
-          ) {
-            return $project![localField]
-          } else {
-            return acc
-          }
-        },
-        {},
-      )
-      return acc.concat([
-        {
-          field: localField,
-          from: path.options.ref,
-          project,
-        },
-      ])
-    }, [])
+    const lookupsConfirmados = getListOfPossibleLookups($project)
 
     let pipeline: any[]
     if (forCount) {
@@ -493,14 +545,8 @@ export default function (
           query[allFieldsQueryName]?.toString() === 'true'
         )
       ) {
-        const tmpProject = { ...$project }
-        for (const lookup of lookupsConfirmados) {
-          for (const keyP in tmpProject) {
-            if (keyP.includes(lookup.field + '.')) delete tmpProject[keyP]
-          }
-          tmpProject![lookup.field] = 1
-        }
-        pipeline.push({ $project: tmpProject })
+        asignarLookups($project, lookupsConfirmados)
+        pipeline.push({ $project })
       } else {
         if (protectedFields) {
           pipeline.push({ $project: stringToQuery(protectedFields, '0') })

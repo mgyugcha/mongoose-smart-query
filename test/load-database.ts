@@ -15,6 +15,9 @@ export default {
       password: string
       useLinux?: boolean
       bestFriend?: Types.ObjectId
+      amigo: {
+        bestFriend?: Types.ObjectId
+      }
     }
     const PersonSchema = new Schema<Person>({
       name: String,
@@ -24,6 +27,9 @@ export default {
       password: String,
       useLinux: Boolean,
       bestFriend: { type: Types.ObjectId, ref: 'persons' },
+      amigo: {
+        bestFriend: { type: Types.ObjectId, ref: 'persons' },
+      },
     })
     PersonSchema.plugin(mongooseSmartQuery, {
       defaultFields: 'name',
@@ -40,6 +46,9 @@ export default {
         colours: ['blue', 'red', 'black'],
         password: '12345',
         useLinux: true,
+        amigo: {
+          bestFriend: '5cef28d32e950227cb5bfaa7',
+        },
       },
       {
         _id: '5cef28d32e950227cb5bfaa7',
