@@ -418,12 +418,21 @@ export default function (
       if (query[queryName] && fieldsForDefaultQuery) {
         const fields = fieldsForDefaultQuery.split(' ')
         const regexParseado = query[queryName].replace(/[()[\\\]*]/g, '.')
+        const subWordArray = regexParseado.split(' ')
         const regex = { $regex: RegExp(regexParseado, 'i') }
         for (const field of fields) {
           const path = schema.path(field)
           if (path) {
             if (!$queryMatch.$or) $queryMatch.$or = []
-            $queryMatch.$or.push({ [field]: regex })
+            if (subWordArray.length === 0) {
+              $queryMatch.$or.push({ [field]: regex })
+            } else {
+              $queryMatch.$or.push({
+                $and: subWordArray.map((word) => ({
+                  [field]: { $regex: RegExp(word, 'i') },
+                })),
+              })
+            }
           } else if (field.includes('.')) {
             const [subField, busqueda] = field.split('.')
             const subpath = schema.path(subField)

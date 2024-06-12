@@ -185,6 +185,11 @@ describe('mongoose-smart-query', () => {
       expect(docs).toHaveLength(2)
     })
 
+    it('word by word search', async () => {
+      const docs = await Persons.smartQuery({ $q: 'yugc mich' })
+      expect(docs).toHaveLength(1)
+    })
+
     it('specials characters', async () => {
       const docs = await Persons.smartQuery({ $q: 'ñandú' })
       expect(docs).toHaveLength(1)
