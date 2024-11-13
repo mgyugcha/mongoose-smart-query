@@ -417,7 +417,10 @@ export default function (
       const _lookupsMatch: QueryForeign = {}
       if (query[queryName] && fieldsForDefaultQuery) {
         const fields = fieldsForDefaultQuery.split(' ')
-        const regexParseado = query[queryName].replace(/[()[\\\]*]/g, '.')
+        const regexParseado = query[queryName]
+          .replace(/[()[\\\]]/g, '.')
+          .replace(/[+]/g, '\\+')
+          .replace(/[*]/g, '\\*')
         const subWordArray = regexParseado.split(' ')
         const regex = { $regex: RegExp(regexParseado, 'i') }
         for (const field of fields) {
