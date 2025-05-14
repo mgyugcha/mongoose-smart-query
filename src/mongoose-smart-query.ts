@@ -30,6 +30,7 @@ interface PluginOptions {
   defaultLimit?: number
   /**
    * What fields to look for when making a query. Default: `''`.
+   * @deprecated Use `defaultFields` instead.
    */
   fieldsForDefaultQuery?: string
   /**
@@ -50,6 +51,7 @@ interface PluginOptions {
   sortQueryName?: string
   /**
    * Key for search. Default: `'$q'`.
+   * @deprecated `queryName` is deprecated, use `searchQueryName` instead.
    */
   queryName?: string
   /**
@@ -64,6 +66,14 @@ interface PluginOptions {
    * Get all fields by default
    */
   getAllFieldsByDefault?: boolean
+  /**
+   * Fields to search by default
+   */
+  fieldsForDefaultSearch?: string[] | string
+  /**
+   * Key for search. Default: `'$search'`.
+   */
+  searchQueryName?: string
 }
 
 interface TObject {
@@ -166,6 +176,8 @@ export default function (
     unwindName = '$unwind',
     fieldsForDefaultQuery = '',
     allFieldsQueryName = '$getAllFields',
+    fieldsForDefaultSearch = [],
+    searchQueryName = '$search',
     getAllFieldsByDefault = false,
   }: PluginOptions,
 ) {
@@ -413,7 +425,7 @@ export default function (
     }
 
     const getMatch = async () => {
-      const $queryMatch: Record<string, any> = {}
+      let $queryMatch: Record<string, any> = {}
       const _lookupsMatch: QueryForeign = {}
       if (query[queryName] && fieldsForDefaultQuery) {
         const fields = fieldsForDefaultQuery.split(' ')
@@ -465,6 +477,25 @@ export default function (
           )
         }
       }
+
+      if (query[searchQueryName] && fieldsForDefaultSearch.length !== 0) {
+        const keysForSearch = Array.isArray(fieldsForDefaultSearch)
+          ? fieldsForDefaultSearch
+          : [fieldsForDefaultSearch]
+        const buscador = keysForSearch.map((item) => ({
+          [item]: {
+            $regex: query[searchQueryName]
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, ''),
+          },
+        }))
+        if (buscador.length === 1) {
+          $queryMatch = buscador[0]
+        } else {
+          $queryMatch.$or = buscador
+        }
+      }
+
       const $queryDefault = await getDefault()
       const $or = $queryDefault.$or
       if ($or) {

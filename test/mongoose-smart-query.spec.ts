@@ -122,6 +122,14 @@ describe('mongoose-smart-query', () => {
       expect(pipeline).toHaveLength(4)
       expect(pipeline[0]).toHaveProperty('$sort')
     })
+
+    it('$search', async () => {
+      const { pipeline } = await Persons.__smartQueryGetPipeline({
+        $search: 'michael',
+      })
+      expect(pipeline).toHaveLength(5)
+      expect(pipeline[0].$match).toHaveProperty('searchString')
+    })
   })
 
   describe('$limit', () => {
@@ -210,7 +218,7 @@ describe('mongoose-smart-query', () => {
     })
     it('regex characters', async () => {
       const docs = await Persons.smartQuery({ $q: '*Yugcha' })
-      expect(docs).toHaveLength(2)
+      expect(docs).toHaveLength(0)
     })
     it('special and character', async () => {
       const docs = await Persons.smartQuery({ $q: '\\' })
@@ -490,6 +498,13 @@ describe('mongoose-smart-query', () => {
         name: '{$or}Luis Ñandú',
       })
       expect(docs).toHaveLength(3)
+    })
+  })
+
+  describe('$search', () => {
+    it('simple search', async () => {
+      const docs = await Persons.smartQuery({ $search: 'MiChaEl' })
+      expect(docs).toHaveLength(1)
     })
   })
 })

@@ -50,5 +50,6 @@
   },
   "peerDependencies": {
     "mongoose": "^8"
-  }
+  },
+  "packageManager": "pnpm@10.10.0"
 }

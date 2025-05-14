@@ -5,7 +5,7 @@ const dbname = 'mongoose-smart-query-test'
 
 export default {
   async start() {
-    const uri = `mongodb://127.0.0.1:27018,127.0.0.1:27019/${dbname}?replicaSet=tocset`
+    const uri = `mongodb://127.0.0.1:27018,127.0.0.1:27019/${dbname}?replicaSet=rs0`
     await connect(uri)
     interface Person extends Document {
       name: string
@@ -18,6 +18,7 @@ export default {
       amigo: {
         bestFriend?: Types.ObjectId
       }
+      searchString: string
     }
     const PersonSchema = new Schema<Person>({
       name: String,
@@ -30,11 +31,18 @@ export default {
       amigo: {
         bestFriend: { type: Types.ObjectId, ref: 'persons' },
       },
+      searchString: String,
     })
     PersonSchema.plugin(mongooseSmartQuery, {
       defaultFields: 'name',
       protectedFields: 'password',
       fieldsForDefaultQuery: 'name bestFriend.name',
+      fieldsForDefaultSearch: ['searchString'],
+    })
+    PersonSchema.pre('validate', function (next) {
+      if (this.isModified('name'))
+        this.searchString = this.name.toLowerCase().replace(/[^a-z0-9]/g, '')
+      next()
     })
     const Persons = model<Person>('persons', PersonSchema)
     await Persons.insertMany([
