@@ -506,7 +506,7 @@ export default function (
           $queryMatch.$or = $or
         }
       }
-      return { ...$queryMatch, ...$queryDefault }
+      return { ...$queryDefault, ...$queryMatch }
     }
 
     function getFieldsProject(query: TObject): TObject | undefined {
