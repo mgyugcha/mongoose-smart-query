@@ -11,6 +11,11 @@ type QueryForeign = Record<
   { collection: string; $match: Record<string, any> }
 >
 
+interface SmartQueryOptions {
+  prePipeline?: any[]
+  useFacet?: boolean
+}
+
 interface PluginOptions {
   /**
    * Fields that should not be included in the query results. Default: `''`.
@@ -261,19 +266,40 @@ export default function (
   schema.statics.smartQuery = async function (
     this: any,
     query: { [key: string]: string } = {},
+    options: SmartQueryOptions = {},
   ) {
+    const { prePipeline = [], useFacet = false } = options
     const {
       pipeline,
       lookupsConfirmados,
     }: { pipeline: any[]; lookupsConfirmados: LookupConfirmado[] } =
-      await this.__smartQueryGetPipeline({ ...query })
+      await this.__smartQueryGetPipeline(
+        { ...query },
+        false,
+        prePipeline,
+        useFacet,
+      )
     const queryEmpresa = query.business
       ? { business: new Types.ObjectId(query.business) }
       : {}
     const dd: any[] = await this.aggregate(pipeline)
+
+    let docs: any[] = dd
+    let pagination: any = null
+
+    if (useFacet) {
+      const result = dd[0] || {}
+      docs = result.data || []
+      const total = result.metadata?.[0]?.total || 0
+      const page = parseInt(query[pageQueryName]) || 1
+      const limit = parseInt(query[limitQueryName]) || defaultLimit
+      const pages = Math.ceil(total / limit)
+      pagination = { total, page, pages, limit }
+    }
+
     const foraneos = await Promise.all(
       lookupsConfirmados.map((item) => {
-        const ids = dd.reduce((acc, val) => {
+        const ids = docs.reduce((acc, val) => {
           const valor = getCampo(val, item.field)
           if (valor) acc.push(valor)
           return acc
@@ -288,20 +314,24 @@ export default function (
       }),
     )
     for (const index in lookupsConfirmados) {
-      const docs = foraneos[index]
+      const docsEx = foraneos[index]
       const confirmado = lookupsConfirmados[index]
-      for (const doc of dd) {
+      for (const doc of docs) {
         const keyPrincipal = getCampo(doc, confirmado.field)
         if (keyPrincipal)
           reemplazarSubdoc(
             doc,
             confirmado.field,
-            docs.find((item) => item._id.equals(keyPrincipal)),
+            docsEx.find((item) => item._id.equals(keyPrincipal)),
           )
       }
     }
 
-    return dd
+    if (useFacet) {
+      return { data: docs, pagination }
+    }
+
+    return docs
   }
 
   schema.statics.smartCount = async function (
@@ -316,7 +346,12 @@ export default function (
   schema.statics.__smartQueryGetPipeline = async function (
     query: { [key: string]: string },
     forCount = false,
+    prePipeline: any[] = [],
+    useFacet = false,
   ) {
+    const hasTextIndex = this.schema.indexes().some(([index]) => {
+      return Object.values(index).includes('text')
+    })
     const queryEmpresa = query.business
       ? { business: new Types.ObjectId(query.business) }
       : {}
@@ -427,7 +462,12 @@ export default function (
     const getMatch = async () => {
       let $queryMatch: Record<string, any> = {}
       const _lookupsMatch: QueryForeign = {}
-      if (query[queryName] && fieldsForDefaultQuery) {
+      let usingTextSearch = false
+
+      if (hasTextIndex && query[queryName]) {
+        $queryMatch = { $text: { $search: query[queryName] } }
+        usingTextSearch = true
+      } else if (query[queryName] && fieldsForDefaultQuery) {
         const fields = fieldsForDefaultQuery.split(' ')
         const regexParseado = query[queryName]
           .replace(/[()[\\\]]/g, '.')
@@ -506,7 +546,7 @@ export default function (
           $queryMatch.$or = $or
         }
       }
-      return { ...$queryDefault, ...$queryMatch }
+      return { match: { ...$queryDefault, ...$queryMatch }, usingTextSearch }
     }
 
     function getFieldsProject(query: TObject): TObject | undefined {
@@ -516,36 +556,6 @@ export default function (
       let $project = stringToQuery(query[fieldsQueryName])
       $project = removeKeys($project, __protected)
       return $project
-    }
-
-    function getSort(): {
-      $localSort?: Record<string, number>
-      $foreignSort?: Record<string, number>
-    } {
-      if (!query[sortQueryName]) {
-        if (!defaultSort) return {}
-        query[sortQueryName] = defaultSort
-      }
-      const regex = /(-)?([\w.]+)/g
-      const $localSort: Record<string, number> = {}
-      const $foreignSort: Record<string, number> = {}
-      let matched
-      while ((matched = regex.exec(query[sortQueryName])) !== null) {
-        const order = matched[1]
-        const localfield = matched[2]
-        const path = !!schema.path(localfield)
-        if (path) {
-          $localSort[localfield] = order ? -1 : 1
-        } else {
-          $foreignSort[localfield] = order ? -1 : 1
-        }
-      }
-      return {
-        $localSort:
-          Object.keys($localSort).length !== 0 ? $localSort : undefined,
-        $foreignSort:
-          Object.keys($foreignSort).length !== 0 ? $foreignSort : undefined,
-      }
     }
 
     const getUnwind = () => {
@@ -561,27 +571,60 @@ export default function (
           ]
     }
 
-    const $match = await getMatch()
+    const { match: $match, usingTextSearch } = await getMatch()
     const $project = getFieldsProject(query)
 
     const lookupsConfirmados = getListOfPossibleLookups($project)
 
-    let pipeline: any[]
+    // Construct pipeline: Match -> PrePipeline -> (Count/Facet/Data)
+    // Indexes are used best if Match is first.
+    let pipeline: any[] = []
+
+    if (Object.keys($match).length !== 0) {
+      pipeline.push({ $match })
+    }
+
+    pipeline.push(...prePipeline)
+
     if (forCount) {
-      pipeline = [
-        ...(Object.keys($match).length !== 0 ? [{ $match }] : []),
-        ...getUnwind(),
-        { $count: 'size' },
-      ]
+      pipeline.push(...getUnwind(), { $count: 'size' })
     } else {
+      const getSort = (): {
+        $localSort?: Record<string, any>
+        $foreignSort?: Record<string, number>
+      } => {
+        if (usingTextSearch) {
+          return { $localSort: { score: { $meta: 'textScore' } } }
+        }
+        if (!query[sortQueryName]) {
+          if (!defaultSort) return {}
+          query[sortQueryName] = defaultSort
+        }
+        const regex = /(-)?([\w.]+)/g
+        const $localSort: Record<string, number> = {}
+        const $foreignSort: Record<string, number> = {}
+        let matched
+        while ((matched = regex.exec(query[sortQueryName])) !== null) {
+          const order = matched[1]
+          const localfield = matched[2]
+          const path = !!schema.path(localfield)
+          if (path) {
+            $localSort[localfield] = order ? -1 : 1
+          } else {
+            $foreignSort[localfield] = order ? -1 : 1
+          }
+        }
+        return {
+          $localSort:
+            Object.keys($localSort).length !== 0 ? $localSort : undefined,
+          $foreignSort:
+            Object.keys($foreignSort).length !== 0 ? $foreignSort : undefined,
+        }
+      }
+
       const sort = getSort()
-      pipeline = [
-        ...(Object.keys($match).length !== 0 ? [{ $match }] : []),
-        ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
-        ...getUnwind(),
-        { $skip: ($page - 1) * $limit },
-        { $limit },
-      ]
+      const projectStage: any[] = []
+
       if (
         !(
           (!originalQuery[fieldsQueryName] && getAllFieldsByDefault === true) ||
@@ -589,11 +632,41 @@ export default function (
         )
       ) {
         asignarLookups($project, lookupsConfirmados)
-        pipeline.push({ $project })
+        const finalProject = { ...$project }
+        if (usingTextSearch) {
+          finalProject.score = { $meta: 'textScore' }
+        }
+        projectStage.push({ $project: finalProject })
       } else {
         if (protectedFields) {
-          pipeline.push({ $project: stringToQuery(protectedFields, '0') })
+          projectStage.push({ $project: stringToQuery(protectedFields, '0') })
         }
+        if (usingTextSearch) {
+          projectStage.push({ $addFields: { score: { $meta: 'textScore' } } })
+        }
+      }
+
+      if (useFacet) {
+        pipeline.push({
+          $facet: {
+            metadata: [{ $count: 'total' }],
+            data: [
+              ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
+              ...getUnwind(),
+              { $skip: ($page - 1) * $limit },
+              { $limit },
+              ...projectStage,
+            ],
+          },
+        })
+      } else {
+        pipeline.push(
+          ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
+          ...getUnwind(),
+          { $skip: ($page - 1) * $limit },
+          { $limit },
+          ...projectStage,
+        )
       }
     }
     return { pipeline, lookupsConfirmados }
