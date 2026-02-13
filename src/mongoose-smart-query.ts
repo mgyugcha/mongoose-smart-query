@@ -1,9 +1,16 @@
-import { Schema, Types, connection } from 'mongoose'
+import {
+  Schema,
+  Types,
+  connection,
+  Model,
+  PipelineStage,
+  FilterQuery,
+} from 'mongoose'
 
 interface LookupConfirmado {
   field: string
   from: string
-  project: any
+  project: Record<string, unknown>
 }
 
 type QueryForeign = Record<
@@ -12,8 +19,20 @@ type QueryForeign = Record<
 >
 
 interface SmartQueryOptions {
-  prePipeline?: any[]
+  prePipeline?: PipelineStage[]
   useFacet?: boolean
+}
+
+interface SmartQueryPagination {
+  total: number
+  page: number
+  pages: number
+  limit: number
+}
+
+interface SmartQueryResult<T = any> {
+  data: T[]
+  pagination: SmartQueryPagination
 }
 
 interface PluginOptions {
@@ -85,7 +104,7 @@ interface TObject {
   [value: string]: any
 }
 
-const reemplazarSubdoc = (data: TObject, path: string, reemplazo?: unknown) => {
+const reemplazarSubdoc = (data: TObject, path: string, reemplazo?: any) => {
   if (!reemplazo) return
   let tmp = data
   const campos = path.split('.')
@@ -129,7 +148,7 @@ export function stringToQuery(query: string = '', value = '1'): object {
   return JSON.parse(`{ ${preJSON} }`)
 }
 
-function parseValue(value: any, instance: string) {
+const parseValue = (value: string, instance: string) => {
   switch (instance) {
     case 'ObjectID':
     case 'ObjectId':
@@ -263,17 +282,17 @@ export default function (
     }
   }
 
-  schema.statics.smartQuery = async function (
-    this: any,
+  schema.statics.smartQuery = async function <T>(
+    this: Model<T>,
     query: { [key: string]: string } = {},
     options: SmartQueryOptions = {},
-  ) {
+  ): Promise<T[] | SmartQueryResult<T>> {
     const { prePipeline = [], useFacet = false } = options
     const {
       pipeline,
       lookupsConfirmados,
-    }: { pipeline: any[]; lookupsConfirmados: LookupConfirmado[] } =
-      await this.__smartQueryGetPipeline(
+    }: { pipeline: PipelineStage[]; lookupsConfirmados: LookupConfirmado[] } =
+      await (this as any).__smartQueryGetPipeline(
         { ...query },
         false,
         prePipeline,
@@ -282,10 +301,10 @@ export default function (
     const queryEmpresa = query.business
       ? { business: new Types.ObjectId(query.business) }
       : {}
-    const dd: any[] = await this.aggregate(pipeline)
+    const dd = await this.aggregate(pipeline)
 
-    let docs: any[] = dd
-    let pagination: any = null
+    let docs = dd
+    let pagination: SmartQueryPagination | null = null
 
     if (useFacet) {
       const result = dd[0] || {}
@@ -328,25 +347,29 @@ export default function (
     }
 
     if (useFacet) {
-      return { data: docs, pagination }
+      return { data: docs, pagination: pagination! }
     }
 
     return docs
   }
 
-  schema.statics.smartCount = async function (
-    this: any,
+  schema.statics.smartCount = async function <T>(
+    this: Model<T>,
     query: { [key: string]: string } = {},
   ) {
-    const { pipeline } = await this.__smartQueryGetPipeline({ ...query }, true)
+    const { pipeline } = await (this as any).__smartQueryGetPipeline(
+      { ...query },
+      true,
+    )
     const result = await this.aggregate(pipeline)
     return result.length === 0 ? 0 : result[0].size
   }
 
-  schema.statics.__smartQueryGetPipeline = async function (
+  schema.statics.__smartQueryGetPipeline = async function <T>(
+    this: Model<T>,
     query: { [key: string]: string },
     forCount = false,
-    prePipeline: any[] = [],
+    prePipeline: PipelineStage[] = [],
     useFacet = false,
   ) {
     const hasTextIndex = this.schema.indexes().some(([index]) => {
@@ -364,7 +387,7 @@ export default function (
     const getDefault = async () => {
       const $localMatch: TObject = {}
       const lookupFinalMatch: QueryForeign = {}
-      const $or: unknown[] = []
+      const $or: FilterQuery<object>[] = []
       for (const keyInicial in query) {
         const path = schema.path(keyInicial)
         if (!path && !keyInicial.includes('.')) continue
@@ -390,7 +413,7 @@ export default function (
         let match
         const values: Array<[string, string, string]> = []
         if (typeof valorQuery === 'string') {
-          const $filtroActual: Record<string, any> = {}
+          const $filtroActual: FilterQuery<object> = {}
           let valor = valorQuery
           const tieneOperadorOr = valor.startsWith('{$or}')
           if (tieneOperadorOr) valor = valor.replace('{$or}', '')
@@ -460,7 +483,7 @@ export default function (
     }
 
     const getMatch = async () => {
-      let $queryMatch: Record<string, any> = {}
+      let $queryMatch: FilterQuery<object> = {}
       const _lookupsMatch: QueryForeign = {}
       let usingTextSearch = false
 
@@ -512,7 +535,7 @@ export default function (
                 .toArray()
               const idsDocs = docs.map((item) => item._id)
               if (idsDocs.length)
-                $queryMatch.$or.push({ [key]: { $in: idsDocs } })
+                $queryMatch.$or!.push({ [key]: { $in: idsDocs } })
             }),
           )
         }
@@ -558,7 +581,7 @@ export default function (
       return $project
     }
 
-    const getUnwind = () => {
+    const getUnwind = (): PipelineStage[] => {
       return !query[unwindName]
         ? []
         : [
@@ -567,7 +590,7 @@ export default function (
                 path: `$${query[unwindName]}`,
                 preserveNullAndEmptyArrays: true,
               },
-            },
+            } as PipelineStage,
           ]
     }
 
@@ -576,18 +599,16 @@ export default function (
 
     const lookupsConfirmados = getListOfPossibleLookups($project)
 
-    // Construct pipeline: Match -> PrePipeline -> (Count/Facet/Data)
-    // Indexes are used best if Match is first.
-    let pipeline: any[] = []
+    const pipeline: PipelineStage[] = []
 
     if (Object.keys($match).length !== 0) {
-      pipeline.push({ $match })
+      pipeline.push({ $match } as PipelineStage)
     }
 
     pipeline.push(...prePipeline)
 
     if (forCount) {
-      pipeline.push(...getUnwind(), { $count: 'size' })
+      pipeline.push(...getUnwind(), { $count: 'size' } as PipelineStage)
     } else {
       const getSort = (): {
         $localSort?: Record<string, any>
@@ -623,7 +644,7 @@ export default function (
       }
 
       const sort = getSort()
-      const projectStage: any[] = []
+      const projectStage: PipelineStage[] = []
 
       if (
         !(
@@ -636,13 +657,17 @@ export default function (
         if (usingTextSearch) {
           finalProject.score = { $meta: 'textScore' }
         }
-        projectStage.push({ $project: finalProject })
+        projectStage.push({ $project: finalProject } as PipelineStage)
       } else {
         if (protectedFields) {
-          projectStage.push({ $project: stringToQuery(protectedFields, '0') })
+          projectStage.push({
+            $project: stringToQuery(protectedFields, '0'),
+          } as PipelineStage)
         }
         if (usingTextSearch) {
-          projectStage.push({ $addFields: { score: { $meta: 'textScore' } } })
+          projectStage.push({
+            $addFields: { score: { $meta: 'textScore' } },
+          } as PipelineStage)
         }
       }
 
@@ -656,7 +681,7 @@ export default function (
               { $skip: ($page - 1) * $limit },
               { $limit },
               ...projectStage,
-            ],
+            ] as never,
           },
         })
       } else {

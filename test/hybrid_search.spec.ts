@@ -1,10 +1,9 @@
 import mongooseSmartQuery from '../src/mongoose-smart-query'
-import { Types, connect, Schema, model, connection, Document } from 'mongoose'
+import { connect, Schema, model, connection, Document } from 'mongoose'
 
 const dbname = 'mongoose-smart-query-hybrid-test'
 
-// Setup
-export default {
+const db = {
   async start() {
     const uri = `mongodb://127.0.0.1:27017/${dbname}`
     await connect(uri)
@@ -12,7 +11,9 @@ export default {
     // Clear existing
     try {
       await connection.dropDatabase()
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
 
     // 1. Schema WITH Text Index
     interface Post extends Document {
@@ -79,10 +80,8 @@ export default {
 describe('mongoose-smart-query Hybrid Search', () => {
   let Posts: any
   let Users: any
-  let db: any
 
   beforeAll(async () => {
-    db = require('./hybrid_search.spec').default
     const models = await db.start()
     Posts = models.Posts
     Users = models.Users

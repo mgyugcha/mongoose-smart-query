@@ -3,8 +3,7 @@ import { Types, connect, Schema, model, connection, Document } from 'mongoose'
 
 const dbname = 'mongoose-smart-query-facet-test'
 
-// Setup
-export default {
+const db = {
   async start() {
     const uri = `mongodb://127.0.0.1:27017/${dbname}`
     await connect(uri)
@@ -12,7 +11,9 @@ export default {
     // Clear existing
     try {
       await connection.dropDatabase()
-    } catch (e) {}
+    } catch {
+      // ignore
+    }
 
     interface Person extends Document {
       name: string
@@ -103,10 +104,8 @@ export default {
 
 describe('mongoose-smart-query facet & prePipeline', () => {
   let Persons: any
-  let db: any
 
   beforeAll(async () => {
-    db = require('./facet.spec').default // Self import to access start/close
     Persons = await db.start()
   })
 
