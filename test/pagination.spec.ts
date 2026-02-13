@@ -121,9 +121,9 @@ describe('mongoose-smart-query facet & prePipeline', () => {
     })
   })
 
-  describe('useFacet: true', () => {
+  describe('autoPaginate: true', () => {
     it('returns structured result with pagination', async () => {
-      const result = await Persons.smartQuery({}, { useFacet: true })
+      const result = await Persons.smartQuery({}, { autoPaginate: true })
 
       expect(result).toHaveProperty('data')
       expect(result).toHaveProperty('pagination')
@@ -140,7 +140,7 @@ describe('mongoose-smart-query facet & prePipeline', () => {
     it('pagination values limit', async () => {
       const result = await Persons.smartQuery(
         { $limit: '2', $page: '2' }, // Strings as usually in query params
-        { useFacet: true },
+        { autoPaginate: true },
       )
       expect(result.data).toHaveLength(2)
       expect(result.pagination).toMatchObject({
@@ -179,7 +179,7 @@ describe('mongoose-smart-query facet & prePipeline', () => {
         {},
         {
           prePipeline: [{ $match: { name: 'Michael Yugcha' } }],
-          useFacet: true,
+          autoPaginate: true,
         },
       )
       expect(result.pagination.total).toBe(1)
@@ -193,7 +193,7 @@ describe('mongoose-smart-query facet & prePipeline', () => {
         {},
         {
           prePipeline: [{ $unwind: '$colours' }],
-          useFacet: true,
+          autoPaginate: true,
           // Ensure we get all results
         },
       )

@@ -20,7 +20,7 @@ type QueryForeign = Record<
 
 interface SmartQueryOptions {
   prePipeline?: PipelineStage[]
-  useFacet?: boolean
+  autoPaginate?: boolean
 }
 
 interface SmartQueryPagination {
@@ -33,6 +33,21 @@ interface SmartQueryPagination {
 interface SmartQueryResult<T = any> {
   data: T[]
   pagination: SmartQueryPagination
+}
+
+export interface SmartQueryStatics {
+  smartQuery<T = any>(
+    query: Record<string, any> | undefined,
+    options: SmartQueryOptions & { autoPaginate: true },
+  ): Promise<SmartQueryResult<T>>
+
+  // Cuando autoPaginate es false o undefined → retorna T[]
+  smartQuery<T = any>(
+    query?: Record<string, any>,
+    options?: SmartQueryOptions & { autoPaginate?: false },
+  ): Promise<T[]>
+
+  smartCount(query?: Record<string, any>): Promise<number>
 }
 
 interface PluginOptions {
@@ -287,34 +302,54 @@ export default function (
     query: { [key: string]: string } = {},
     options: SmartQueryOptions = {},
   ): Promise<T[] | SmartQueryResult<T>> {
-    const { prePipeline = [], useFacet = false } = options
-    const {
-      pipeline,
-      lookupsConfirmados,
-    }: { pipeline: PipelineStage[]; lookupsConfirmados: LookupConfirmado[] } =
-      await (this as any).__smartQueryGetPipeline(
-        { ...query },
-        false,
-        prePipeline,
-        useFacet,
-      )
-    const queryEmpresa = query.business
-      ? { business: new Types.ObjectId(query.business) }
-      : {}
-    const dd = await this.aggregate(pipeline)
+    const { prePipeline = [], autoPaginate = false } = options
 
-    let docs = dd
+    let docs: any[] = []
     let pagination: SmartQueryPagination | null = null
+    let lookupsConfirmados: LookupConfirmado[]
 
-    if (useFacet) {
-      const result = dd[0] || {}
-      docs = result.data || []
-      const total = result.metadata?.[0]?.total || 0
+    if (autoPaginate) {
+      const dataPromise = (this as any)
+        .__smartQueryGetPipeline({ ...query }, false, prePipeline)
+        .then(async ({ pipeline, lookupsConfirmados: lookups }: any) => {
+          return {
+            docs: await this.aggregate(pipeline),
+            lookups,
+          }
+        })
+
+      const countPromise = (this as any)
+        .__smartQueryGetPipeline(
+          { ...query },
+          true, // forCount
+          prePipeline,
+        )
+        .then(({ pipeline }: any) => this.aggregate(pipeline))
+
+      const [dataResult, countResult] = await Promise.all([
+        dataPromise,
+        countPromise,
+      ])
+
+      docs = dataResult.docs
+      lookupsConfirmados = dataResult.lookups
+
+      const total = countResult[0]?.size || 0
       const page = parseInt(query[pageQueryName]) || 1
       const limit = parseInt(query[limitQueryName]) || defaultLimit
       const pages = Math.ceil(total / limit)
       pagination = { total, page, pages, limit }
+    } else {
+      const { pipeline, lookupsConfirmados: lookups } = await (
+        this as any
+      ).__smartQueryGetPipeline({ ...query }, false, prePipeline)
+      lookupsConfirmados = lookups
+      docs = await this.aggregate(pipeline)
     }
+
+    const queryEmpresa = query.business
+      ? { business: new Types.ObjectId(query.business) }
+      : {}
 
     const foraneos = await Promise.all(
       lookupsConfirmados.map((item) => {
@@ -332,6 +367,7 @@ export default function (
           : []
       }),
     )
+
     for (const index in lookupsConfirmados) {
       const docsEx = foraneos[index]
       const confirmado = lookupsConfirmados[index]
@@ -346,7 +382,7 @@ export default function (
       }
     }
 
-    if (useFacet) {
+    if (autoPaginate) {
       return { data: docs, pagination: pagination! }
     }
 
@@ -370,7 +406,6 @@ export default function (
     query: { [key: string]: string },
     forCount = false,
     prePipeline: PipelineStage[] = [],
-    useFacet = false,
   ) {
     const hasTextIndex = this.schema.indexes().some(([index]) => {
       return Object.values(index).includes('text')
@@ -615,7 +650,7 @@ export default function (
         $foreignSort?: Record<string, number>
       } => {
         if (usingTextSearch) {
-          return { $localSort: { score: { $meta: 'textScore' } } }
+          return { $localSort: { score: { $meta: 'textScore' }, _id: -1 } }
         }
         if (!query[sortQueryName]) {
           if (!defaultSort) return {}
@@ -671,28 +706,13 @@ export default function (
         }
       }
 
-      if (useFacet) {
-        pipeline.push({
-          $facet: {
-            metadata: [{ $count: 'total' }],
-            data: [
-              ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
-              ...getUnwind(),
-              { $skip: ($page - 1) * $limit },
-              { $limit },
-              ...projectStage,
-            ] as never,
-          },
-        })
-      } else {
-        pipeline.push(
-          ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
-          ...getUnwind(),
-          { $skip: ($page - 1) * $limit },
-          { $limit },
-          ...projectStage,
-        )
-      }
+      pipeline.push(
+        ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
+        ...getUnwind(),
+        { $skip: ($page - 1) * $limit },
+        { $limit },
+        ...projectStage,
+      )
     }
     return { pipeline, lookupsConfirmados }
   }

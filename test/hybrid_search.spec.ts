@@ -134,7 +134,7 @@ describe('mongoose-smart-query Hybrid Search', () => {
     it('combines text search with useFacet', async () => {
       const result = await Posts.smartQuery(
         { $q: 'indexing' },
-        { useFacet: true },
+        { autoPaginate: true },
       )
       expect(result.pagination.total).toBe(1)
       expect(result.data[0].title).toBe('MongoDB Indexing')
