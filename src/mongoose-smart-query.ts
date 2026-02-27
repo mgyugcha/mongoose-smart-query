@@ -13,6 +13,39 @@ interface LookupConfirmado {
   project: Record<string, unknown>
 }
 
+/**
+ * Normalizes text for search indexing and querying.
+ * Converts to lowercase, removes diacritics/accents, and removes any non-alphanumeric character (except the spacer).
+ * Multiple spaces/spacers are collapsed into one.
+ * @param input String or array of strings to concatenate and normalize.
+ * @param spacer String used to join array values or replace spaces. Default is ' '.
+ * @returns The normalized string.
+ */
+export function normalizeSearchText(
+  input: string | Array<string | undefined>,
+  spacer = ' ',
+  maxSearchLength = 900,
+): string {
+  if (!input) return ''
+
+  const processStr = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize('NFD') // Decompose combined graphemes into the combination of simple ones
+      .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+      .replace(/[^a-z0-9 ]/g, '') // Remove symbols down to alphanumeric and spaces
+      .trim()
+      .replace(/\s+/g, spacer) // Collapse multiple spaces and apply spacer
+
+  if (Array.isArray(input)) {
+    return input
+      .map((item) => (item ? processStr(item) : ''))
+      .filter(Boolean)
+      .join(spacer)
+  }
+  return processStr(input).substring(0, maxSearchLength)
+}
+
 type QueryForeign = Record<
   string,
   { collection: string; $match: Record<string, any> }
@@ -68,8 +101,7 @@ interface PluginOptions {
    */
   defaultLimit?: number
   /**
-   * What fields to look for when making a query. Default: `''`.
-   * @deprecated Use `defaultFields` instead.
+   * What fields to look for when making a default search query. Default: `''`.
    */
   fieldsForDefaultQuery?: string
   /**
@@ -90,7 +122,6 @@ interface PluginOptions {
   sortQueryName?: string
   /**
    * Key for search. Default: `'$q'`.
-   * @deprecated `queryName` is deprecated, use `searchQueryName` instead.
    */
   queryName?: string
   /**
@@ -102,17 +133,13 @@ interface PluginOptions {
    */
   allFieldsQueryName?: string
   /**
-   * Get all fields by default
+   * Key for specific text index search (MongoDB $text). Default: `'$text'`.
    */
-  getAllFieldsByDefault?: boolean
+  textQueryName?: string
   /**
-   * Fields to search by default
+   * If true, applies `normalizeSearchText` to the `$q` search value before executing the query. Default: `false`.
    */
-  fieldsForDefaultSearch?: string[] | string
-  /**
-   * Key for search. Default: `'$search'`.
-   */
-  searchQueryName?: string
+  normalizeSearchQuery?: boolean
 }
 
 interface TObject {
@@ -207,17 +234,16 @@ export default function (
     defaultFields = '_id',
     defaultSort = '-_id',
     defaultLimit = 20,
+    fieldsForDefaultQuery = '',
     pageQueryName = '$page',
     limitQueryName = '$limit',
     fieldsQueryName = '$fields',
     sortQueryName = '$sort',
     queryName = '$q',
+    textQueryName = '$text',
     unwindName = '$unwind',
-    fieldsForDefaultQuery = '',
     allFieldsQueryName = '$getAllFields',
-    fieldsForDefaultSearch = [],
-    searchQueryName = '$search',
-    getAllFieldsByDefault = false,
+    normalizeSearchQuery = false,
   }: PluginOptions,
 ) {
   const __protected = stringToQuery(protectedFields)
@@ -413,9 +439,6 @@ export default function (
     const queryEmpresa = query.business
       ? { business: new Types.ObjectId(query.business) }
       : {}
-    const originalQuery: { [key: string]: string } = JSON.parse(
-      JSON.stringify(query),
-    )
     const $page = parseInt(query[pageQueryName]) || 1
     const $limit = parseInt(query[limitQueryName]) || defaultLimit
 
@@ -522,44 +545,65 @@ export default function (
       const _lookupsMatch: QueryForeign = {}
       let usingTextSearch = false
 
-      if (hasTextIndex && query[queryName]) {
-        $queryMatch = { $text: { $search: query[queryName] } }
+      if (hasTextIndex && query[textQueryName]) {
+        $queryMatch = { $text: { $search: query[textQueryName] } }
         usingTextSearch = true
       } else if (query[queryName] && fieldsForDefaultQuery) {
         const fields = fieldsForDefaultQuery.split(' ')
-        const regexParseado = query[queryName]
+        const searchValue = normalizeSearchQuery
+          ? normalizeSearchText(query[queryName])
+          : query[queryName]
+        const regexParseado = searchValue
           .replace(/[()[\\\]]/g, '.')
           .replace(/[+]/g, '\\+')
           .replace(/[*]/g, '\\*')
         const subWordArray = regexParseado.split(' ')
-        const regex = { $regex: RegExp(regexParseado, 'i') }
-        for (const field of fields) {
+        const regexFlags = normalizeSearchQuery ? '' : 'i'
+        const regex = { $regex: RegExp(regexParseado, regexFlags) }
+
+        if (fields.length === 1) {
+          const field = fields[0]
           const path = schema.path(field)
           if (path) {
-            if (!$queryMatch.$or) $queryMatch.$or = []
-            if (subWordArray.length === 0) {
-              $queryMatch.$or.push({ [field]: regex })
-            } else {
-              $queryMatch.$or.push({
+            $queryMatch = { [field]: regex }
+            if (subWordArray.length > 1) {
+              $queryMatch = {
                 $and: subWordArray.map((word) => ({
-                  [field]: { $regex: RegExp(word, 'i') },
+                  [field]: { $regex: RegExp(word, regexFlags) },
                 })),
-              })
+              }
             }
-          } else if (field.includes('.')) {
-            const [subField, busqueda] = field.split('.')
-            const subpath = schema.path(subField)
-            if (subpath && subpath.options.ref) {
-              if (!_lookupsMatch[subField])
-                _lookupsMatch[subField] = {
-                  collection: subpath.options.ref,
-                  $match: { $or: [{ [busqueda]: regex }] },
-                }
-              else
-                _lookupsMatch[subField].$match.$or.push({ [busqueda]: regex })
+          }
+        } else {
+          for (const field of fields) {
+            const path = schema.path(field)
+            if (path) {
+              if (!$queryMatch.$or) $queryMatch.$or = []
+              if (subWordArray.length <= 1) {
+                $queryMatch.$or.push({ [field]: regex })
+              } else {
+                $queryMatch.$or.push({
+                  $and: subWordArray.map((word) => ({
+                    [field]: { $regex: RegExp(word, regexFlags) },
+                  })),
+                })
+              }
+            } else if (field.includes('.')) {
+              const [subField, busqueda] = field.split('.')
+              const subpath = schema.path(subField)
+              if (subpath && subpath.options.ref) {
+                if (!_lookupsMatch[subField])
+                  _lookupsMatch[subField] = {
+                    collection: subpath.options.ref,
+                    $match: { $or: [{ [busqueda]: regex }] },
+                  }
+                else
+                  _lookupsMatch[subField].$match.$or.push({ [busqueda]: regex })
+              }
             }
           }
         }
+
         if (Object.keys(_lookupsMatch).length !== 0) {
           await Promise.all(
             Object.entries(_lookupsMatch).map(async ([key, value]) => {
@@ -569,28 +613,12 @@ export default function (
                 .project({ _id: 1 })
                 .toArray()
               const idsDocs = docs.map((item) => item._id)
-              if (idsDocs.length)
+              if (idsDocs.length) {
+                if (!$queryMatch.$or) $queryMatch.$or = []
                 $queryMatch.$or!.push({ [key]: { $in: idsDocs } })
+              }
             }),
           )
-        }
-      }
-
-      if (query[searchQueryName] && fieldsForDefaultSearch.length !== 0) {
-        const keysForSearch = Array.isArray(fieldsForDefaultSearch)
-          ? fieldsForDefaultSearch
-          : [fieldsForDefaultSearch]
-        const buscador = keysForSearch.map((item) => ({
-          [item]: {
-            $regex: query[searchQueryName]
-              .toLowerCase()
-              .replace(/[^a-z0-9]/g, ''),
-          },
-        }))
-        if (buscador.length === 1) {
-          $queryMatch = buscador[0]
-        } else {
-          $queryMatch.$or = buscador
         }
       }
 
@@ -681,12 +709,7 @@ export default function (
       const sort = getSort()
       const projectStage: PipelineStage[] = []
 
-      if (
-        !(
-          (!originalQuery[fieldsQueryName] && getAllFieldsByDefault === true) ||
-          query[allFieldsQueryName]?.toString() === 'true'
-        )
-      ) {
+      if (!(query[allFieldsQueryName]?.toString() === 'true')) {
         asignarLookups($project, lookupsConfirmados)
         const finalProject = { ...$project }
         if (usingTextSearch) {

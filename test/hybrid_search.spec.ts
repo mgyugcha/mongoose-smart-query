@@ -104,7 +104,7 @@ describe('mongoose-smart-query Hybrid Search', () => {
   describe('Schema WITH Text Index ($text Search)', () => {
     it('uses $text search when available', async () => {
       // Search for "indexing"
-      const result = await Posts.smartQuery({ $q: 'indexing' })
+      const result = await Posts.smartQuery({ $text: 'indexing' })
       expect(result).toHaveLength(1)
       expect(result[0].title).toBe('MongoDB Indexing')
       // Should have score projected
@@ -121,7 +121,7 @@ describe('mongoose-smart-query Hybrid Search', () => {
       // "MongoDB" title might be more relevant or "MongoDB Text".
       // Actually "Just MongoDB" has "MongoDB" as 1/2 words?
       // Let's rely on the property that score exists and we can see it.
-      const result = await Posts.smartQuery({ $q: 'MongoDB' })
+      const result = await Posts.smartQuery({ $text: 'MongoDB' })
       expect(result.length).toBeGreaterThan(1)
       expect(result[0]).toHaveProperty('score')
 
@@ -133,7 +133,7 @@ describe('mongoose-smart-query Hybrid Search', () => {
 
     it('combines text search with useFacet', async () => {
       const result = await Posts.smartQuery(
-        { $q: 'indexing' },
+        { $text: 'indexing' },
         { autoPaginate: true },
       )
       expect(result.pagination.total).toBe(1)
@@ -144,7 +144,9 @@ describe('mongoose-smart-query Hybrid Search', () => {
 
   describe('Pipeline Inspection (Internal)', () => {
     it('generates $text stage for text index schema', async () => {
-      const { pipeline } = await Posts.__smartQueryGetPipeline({ $q: 'search' })
+      const { pipeline } = await Posts.__smartQueryGetPipeline({
+        $text: 'search',
+      })
       // Check if first stage is $match with $text
       // pipeline is [ { $match: { ... } }, ... ]
       // or [ { $match: { $text: ... } } ]

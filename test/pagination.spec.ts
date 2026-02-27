@@ -44,8 +44,7 @@ const db = {
     PersonSchema.plugin(mongooseSmartQuery, {
       defaultFields: 'name',
       protectedFields: 'password',
-      fieldsForDefaultQuery: 'name bestFriend.name',
-      fieldsForDefaultSearch: ['searchString'],
+      fieldsForDefaultQuery: 'name bestFriend.name searchString',
     })
 
     // Cleanup if model exists from previous run in same process (jest quirk sometimes)

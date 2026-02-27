@@ -36,8 +36,7 @@ export default {
     PersonSchema.plugin(mongooseSmartQuery, {
       defaultFields: 'name',
       protectedFields: 'password',
-      fieldsForDefaultQuery: 'name bestFriend.name',
-      fieldsForDefaultSearch: ['searchString'],
+      fieldsForDefaultQuery: 'name bestFriend.name searchString',
     })
     PersonSchema.pre('validate', function (next) {
       if (this.isModified('name'))

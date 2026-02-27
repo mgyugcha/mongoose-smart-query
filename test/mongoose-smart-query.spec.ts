@@ -1,5 +1,9 @@
 import Database, { getPersonModel } from './load-database'
-import { removeKeys, stringToQuery } from '../src/mongoose-smart-query'
+import {
+  removeKeys,
+  stringToQuery,
+  normalizeSearchText,
+} from '../src/mongoose-smart-query'
 
 // describe('list of possible lookups', () => {
 //   it('a single nested field', () => {
@@ -123,12 +127,12 @@ describe('mongoose-smart-query', () => {
       expect(pipeline[0]).toHaveProperty('$sort')
     })
 
-    it('$search', async () => {
+    it('$q autocomplete', async () => {
       const { pipeline } = await Persons.__smartQueryGetPipeline({
-        $search: 'michael',
+        $q: 'michael',
       })
       expect(pipeline).toHaveLength(5)
-      expect(pipeline[0].$match).toHaveProperty('searchString')
+      expect(pipeline[0].$match).toHaveProperty('$or')
     })
   })
 
@@ -501,10 +505,36 @@ describe('mongoose-smart-query', () => {
     })
   })
 
-  describe('$search', () => {
+  describe('$q autocomplete test cases', () => {
     it('simple search', async () => {
-      const docs = await Persons.smartQuery({ $search: 'MiChaEl' })
-      expect(docs).toHaveLength(1)
+      const docs = await Persons.smartQuery({ $q: 'MiChaEl' })
+      expect(docs).toHaveLength(2)
+    })
+
+    it('should not wrap single-word regex in $and when targeting a single field', async () => {
+      const { pipeline } = await (Persons as any).__smartQueryGetPipeline({
+        $q: 'michael',
+      })
+      // Expecting { $or: [{ name: { $regex: /.../i } }, ... ] }, NO nesting of $and array.
+      const matchStage = pipeline.find((p: any) => p.$match)?.$match
+      expect(matchStage).toHaveProperty('$or')
+      expect(matchStage.$or[0]).toHaveProperty('name')
+      expect(matchStage.$or[0].name).toHaveProperty('$regex')
+      expect(matchStage.$or[0].name).not.toHaveProperty('$and')
+    })
+  })
+
+  describe('normalizeSearchText', () => {
+    it('should remove accents and symbols and convert to lowercase', () => {
+      expect(normalizeSearchText('Geóvänny Ñandú-Pérez!')).toBe(
+        'geovanny nanduperez',
+      )
+    })
+    it('should condense multiple spaces', () => {
+      expect(normalizeSearchText(' Luis   Eduardo ')).toBe('luis eduardo')
+    })
+    it('should accept an array and join it with the spacer', () => {
+      expect(normalizeSearchText(['Juan', 'Pérez'], '_')).toBe('juan_perez')
     })
   })
 })
