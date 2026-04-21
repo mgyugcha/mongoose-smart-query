@@ -166,6 +166,8 @@ const getCampo = (data: TObject, path: string) => {
   return tmp
 }
 
+const DEFAULT_COLLATION = { locale: 'es', numericOrdering: true }
+
 /**
  * Converts a string to object. Example:
  * 'name age friends { name }' => { name: 1, age: 1, friends: { name: 1 } }
@@ -339,7 +341,7 @@ export default function (
         .__smartQueryGetPipeline({ ...query }, false, prePipeline)
         .then(async ({ pipeline, lookupsConfirmados: lookups }: any) => {
           return {
-            docs: await this.aggregate(pipeline),
+            docs: await this.aggregate(pipeline).collation(DEFAULT_COLLATION),
             lookups,
           }
         })
@@ -370,7 +372,7 @@ export default function (
         this as any
       ).__smartQueryGetPipeline({ ...query }, false, prePipeline)
       lookupsConfirmados = lookups
-      docs = await this.aggregate(pipeline)
+      docs = await this.aggregate(pipeline).collation(DEFAULT_COLLATION)
     }
 
     const queryEmpresa = query.business
