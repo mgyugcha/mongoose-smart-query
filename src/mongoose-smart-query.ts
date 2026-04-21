@@ -140,6 +140,10 @@ interface PluginOptions {
    * If true, applies `normalizeSearchText` to the `$q` search value before executing the query. Default: `false`.
    */
   normalizeSearchQuery?: boolean
+  /**
+   * Collation to be applied to the aggregate queries. Default: `undefined`.
+   */
+  collation?: any
 }
 
 interface TObject {
@@ -165,8 +169,6 @@ const getCampo = (data: TObject, path: string) => {
   campos.forEach((campo) => (tmp = tmp?.[campo]))
   return tmp
 }
-
-const DEFAULT_COLLATION = { locale: 'es', numericOrdering: true }
 
 /**
  * Converts a string to object. Example:
@@ -246,6 +248,7 @@ export default function (
     unwindName = '$unwind',
     allFieldsQueryName = '$getAllFields',
     normalizeSearchQuery = false,
+    collation,
   }: PluginOptions,
 ) {
   const __protected = stringToQuery(protectedFields)
@@ -340,8 +343,10 @@ export default function (
       const dataPromise = (this as any)
         .__smartQueryGetPipeline({ ...query }, false, prePipeline)
         .then(async ({ pipeline, lookupsConfirmados: lookups }: any) => {
+          const agg = this.aggregate(pipeline)
+          if (collation) agg.collation(collation)
           return {
-            docs: await this.aggregate(pipeline).collation(DEFAULT_COLLATION),
+            docs: await agg,
             lookups,
           }
         })
@@ -372,7 +377,9 @@ export default function (
         this as any
       ).__smartQueryGetPipeline({ ...query }, false, prePipeline)
       lookupsConfirmados = lookups
-      docs = await this.aggregate(pipeline).collation(DEFAULT_COLLATION)
+      const agg = this.aggregate(pipeline)
+      if (collation) agg.collation(collation)
+      docs = await agg
     }
 
     const queryEmpresa = query.business
@@ -563,45 +570,30 @@ export default function (
         const regexFlags = normalizeSearchQuery ? '' : 'i'
         const regex = { $regex: RegExp(regexParseado, regexFlags) }
 
-        if (fields.length === 1) {
-          const field = fields[0]
+        for (const field of fields) {
           const path = schema.path(field)
           if (path) {
-            $queryMatch = { [field]: regex }
-            if (subWordArray.length > 1) {
-              $queryMatch = {
+            if (!$queryMatch.$or) $queryMatch.$or = []
+            if (subWordArray.length <= 1) {
+              $queryMatch.$or.push({ [field]: regex })
+            } else {
+              $queryMatch.$or.push({
                 $and: subWordArray.map((word) => ({
                   [field]: { $regex: RegExp(word, regexFlags) },
                 })),
-              }
+              })
             }
-          }
-        } else {
-          for (const field of fields) {
-            const path = schema.path(field)
-            if (path) {
-              if (!$queryMatch.$or) $queryMatch.$or = []
-              if (subWordArray.length <= 1) {
-                $queryMatch.$or.push({ [field]: regex })
-              } else {
-                $queryMatch.$or.push({
-                  $and: subWordArray.map((word) => ({
-                    [field]: { $regex: RegExp(word, regexFlags) },
-                  })),
-                })
-              }
-            } else if (field.includes('.')) {
-              const [subField, busqueda] = field.split('.')
-              const subpath = schema.path(subField)
-              if (subpath && subpath.options.ref) {
-                if (!_lookupsMatch[subField])
-                  _lookupsMatch[subField] = {
-                    collection: subpath.options.ref,
-                    $match: { $or: [{ [busqueda]: regex }] },
-                  }
-                else
-                  _lookupsMatch[subField].$match.$or.push({ [busqueda]: regex })
-              }
+          } else if (field.includes('.')) {
+            const [subField, busqueda] = field.split('.')
+            const subpath = schema.path(subField)
+            if (subpath && subpath.options.ref) {
+              if (!_lookupsMatch[subField])
+                _lookupsMatch[subField] = {
+                  collection: subpath.options.ref,
+                  $match: { $or: [{ [busqueda]: regex }] },
+                }
+              else
+                _lookupsMatch[subField].$match.$or.push({ [busqueda]: regex })
             }
           }
         }
