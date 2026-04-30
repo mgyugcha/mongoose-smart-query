@@ -6,6 +6,37 @@ import {
   PipelineStage,
   FilterQuery,
 } from 'mongoose'
+import { Client as TypesenseClient } from 'typesense'
+import type { ConfigurationOptions } from 'typesense/lib/Typesense/Configuration'
+import type { CollectionCreateSchema } from 'typesense/lib/Typesense/Collections'
+import type { SearchParams } from 'typesense/lib/Typesense/Documents'
+
+export let globalTypesenseClient: TypesenseClient | null = null
+
+export function setTypesenseConfig(options: ConfigurationOptions) {
+  globalTypesenseClient = new TypesenseClient(options)
+}
+
+export interface SmartQueryFieldSchema {
+  name: string
+  type: string
+  facet?: boolean
+  optional?: boolean
+  index?: boolean
+  sort?: boolean
+  infix?: boolean
+  locale?: string
+  drop?: boolean
+  mongoField?: string
+  [key: string]: any
+}
+
+export interface PluginTypesenseOptions {
+  typesenseCollection: string
+  schema: Omit<CollectionCreateSchema, 'fields'> & {
+    fields?: SmartQueryFieldSchema[]
+  }
+}
 
 interface LookupConfirmado {
   field: string
@@ -144,6 +175,10 @@ interface PluginOptions {
    * Collation to be applied to the aggregate queries. Default: `undefined`.
    */
   collation?: any
+  /**
+   * Configuration for Typesense integration.
+   */
+  typesense?: PluginTypesenseOptions
 }
 
 interface TObject {
@@ -249,6 +284,7 @@ export default function (
     allFieldsQueryName = '$getAllFields',
     normalizeSearchQuery = false,
     collation,
+    typesense,
   }: PluginOptions,
 ) {
   const __protected = stringToQuery(protectedFields)
@@ -328,6 +364,162 @@ export default function (
     }
   }
 
+  const buildTypesenseSearchParameters = (
+    query: { [key: string]: string },
+    tsSchema: PluginTypesenseOptions['schema'],
+  ): SearchParams<any> => {
+    const $q = query[queryName] || '*'
+    const page = parseInt(query[pageQueryName]) || 1
+    const limit = parseInt(query[limitQueryName]) || defaultLimit
+
+    let queryByFields = tsSchema.fields
+      ?.filter((f) => f.type.includes('string') && f.name !== 'id' && !f.facet)
+      .map((f) => f.name)
+
+    if (fieldsForDefaultQuery && query[queryName]) {
+      queryByFields = fieldsForDefaultQuery
+        .split(' ')
+        .map((mongoField) => {
+          const field = tsSchema.fields?.find(
+            (f) => (f.mongoField || f.name) === mongoField,
+          )
+          return field ? field.name : mongoField
+        })
+        .filter((field) => tsSchema.fields?.some((f) => f.name === field))
+    }
+
+    const searchParams: SearchParams<any> = {
+      q: $q,
+      query_by: queryByFields?.length ? queryByFields.join(',') : '*',
+      page,
+      per_page: limit,
+    }
+
+    const filterBy: string[] = []
+
+    for (const key in query) {
+      if (
+        [
+          pageQueryName,
+          limitQueryName,
+          sortQueryName,
+          queryName,
+          fieldsQueryName,
+          unwindName,
+          textQueryName,
+          allFieldsQueryName,
+        ].includes(key)
+      ) {
+        continue
+      }
+      const field = tsSchema.fields?.find(
+        (f) => (f.mongoField || f.name) === key,
+      )
+      if (!field) continue
+
+      const tsFieldName = field.name
+
+      const val = query[key]
+      if (typeof val !== 'string') continue
+
+      const queryRegex = /(?:\{(\$?[\w ]+)\})?([^{}\n]+)/g
+      let match
+      const values: Array<[string, string, string]> = []
+      let valor = val
+      if (valor.startsWith('{$or}')) valor = valor.replace('{$or}', '')
+
+      while ((match = queryRegex.exec(valor)) !== null) {
+        values.push([match[0], match[1], match[2]])
+      }
+
+      for (const [, operator, value] of values) {
+        let finalValue = value
+        if (field.type.includes('int') || field.type.includes('float')) {
+          const parsedDate = Date.parse(value)
+          if (!isNaN(parsedDate) && value.includes('-')) {
+            finalValue = parsedDate.toString()
+          }
+        }
+
+        const tsValue =
+          finalValue.includes(' ') || finalValue.includes('-') ? `\`${finalValue}\`` : finalValue
+        const tsValues = finalValue
+          .split(',')
+          .map((v) => {
+            const vTrim = v.trim()
+            let parsedTrim = vTrim
+            if (field.type.includes('int') || field.type.includes('float')) {
+              const pDate = Date.parse(vTrim)
+              if (!isNaN(pDate) && vTrim.includes('-')) {
+                parsedTrim = pDate.toString()
+              }
+            }
+            return parsedTrim.includes(' ') || parsedTrim.includes('-')
+              ? `\`${parsedTrim}\``
+              : parsedTrim
+          })
+          .join(',')
+
+        switch (operator) {
+          case '$in':
+            filterBy.push(`${tsFieldName}:=[${tsValues}]`)
+            break
+          case '$nin':
+            filterBy.push(`${tsFieldName}:!=[${tsValues}]`)
+            break
+          case '$gte':
+            filterBy.push(`${tsFieldName}:>=${finalValue}`)
+            break
+          case '$gt':
+            filterBy.push(`${tsFieldName}:>${finalValue}`)
+            break
+          case '$lte':
+            filterBy.push(`${tsFieldName}:<=${finalValue}`)
+            break
+          case '$lt':
+            filterBy.push(`${tsFieldName}:<${finalValue}`)
+            break
+          case '$ne':
+            filterBy.push(`${tsFieldName}:!=${tsValue}`)
+            break
+          case '$exists':
+          case '$includes':
+            // Typesense doesn't natively support $exists or $includes in filter_by efficiently
+            break
+          default:
+            if (finalValue.includes('$exists')) break
+            filterBy.push(`${tsFieldName}:=${tsValue}`)
+            break
+        }
+      }
+    }
+
+    if (filterBy.length > 0) {
+      searchParams.filter_by = filterBy.join(' && ')
+    }
+
+    if (query[sortQueryName] || defaultSort) {
+      const sortQuery = query[sortQueryName] || defaultSort
+      const regex = /(-)?([\w.]+)/g
+      let matched
+      const sortBy: string[] = []
+      while ((matched = regex.exec(sortQuery)) !== null) {
+        const order = matched[1] ? 'desc' : 'asc'
+        const localfield = matched[2]
+
+        const field = tsSchema.fields?.find((f) => (f.mongoField || f.name) === localfield)
+        if (field) {
+          sortBy.push(`${field.name}:${order}`)
+        }
+      }
+      if (sortBy.length > 0) {
+        searchParams.sort_by = sortBy.join(',')
+      }
+    }
+
+    return searchParams
+  }
+
   schema.statics.smartQuery = async function <T>(
     this: Model<T>,
     query: { [key: string]: string } = {},
@@ -339,9 +531,37 @@ export default function (
     let pagination: SmartQueryPagination | null = null
     let lookupsConfirmados: LookupConfirmado[]
 
+    let useMongoDirectly = true
+    let typesenseIds: string[] = []
+    let typesenseTotal = 0
+
+    if (globalTypesenseClient && typesense) {
+      try {
+        const searchParams = buildTypesenseSearchParameters(
+          query,
+          typesense.schema,
+        )
+        const searchResults = await globalTypesenseClient
+          .collections(typesense.typesenseCollection)
+          .documents()
+          .search(searchParams)
+        typesenseIds =
+          searchResults.hits?.map((h) => (h.document as any).id as string) || []
+        typesenseTotal = searchResults.found || 0
+        useMongoDirectly = false
+      } catch (error) {
+        console.error(
+          'Error fetching from Typesense, falling back to MongoDB:',
+          error,
+        )
+        useMongoDirectly = true
+      }
+    }
+
     if (autoPaginate) {
+      const tsIdsArg = useMongoDirectly ? undefined : typesenseIds
       const dataPromise = (this as any)
-        .__smartQueryGetPipeline({ ...query }, false, prePipeline)
+        .__smartQueryGetPipeline({ ...query }, false, prePipeline, tsIdsArg)
         .then(async ({ pipeline, lookupsConfirmados: lookups }: any) => {
           const agg = this.aggregate(pipeline)
           if (collation) agg.collation(collation)
@@ -351,13 +571,18 @@ export default function (
           }
         })
 
-      const countPromise = (this as any)
-        .__smartQueryGetPipeline(
-          { ...query },
-          true, // forCount
-          prePipeline,
-        )
-        .then(({ pipeline }: any) => this.aggregate(pipeline))
+      let countPromise
+      if (!useMongoDirectly) {
+        countPromise = Promise.resolve([{ size: typesenseTotal }])
+      } else {
+        countPromise = (this as any)
+          .__smartQueryGetPipeline(
+            { ...query },
+            true, // forCount
+            prePipeline,
+          )
+          .then(({ pipeline }: any) => this.aggregate(pipeline))
+      }
 
       const [dataResult, countResult] = await Promise.all([
         dataPromise,
@@ -373,9 +598,10 @@ export default function (
       const pages = Math.ceil(total / limit)
       pagination = { total, page, pages, limit }
     } else {
+      const tsIdsArg = useMongoDirectly ? undefined : typesenseIds
       const { pipeline, lookupsConfirmados: lookups } = await (
         this as any
-      ).__smartQueryGetPipeline({ ...query }, false, prePipeline)
+      ).__smartQueryGetPipeline({ ...query }, false, prePipeline, tsIdsArg)
       lookupsConfirmados = lookups
       const agg = this.aggregate(pipeline)
       if (collation) agg.collation(collation)
@@ -428,6 +654,25 @@ export default function (
     this: Model<T>,
     query: { [key: string]: string } = {},
   ) {
+    if (globalTypesenseClient && typesense) {
+      try {
+        const searchParams = buildTypesenseSearchParameters(
+          query,
+          typesense.schema,
+        )
+        const searchResults = await globalTypesenseClient
+          .collections(typesense.typesenseCollection)
+          .documents()
+          .search(searchParams)
+        return searchResults.found || 0
+      } catch (error) {
+        console.error(
+          'Error fetching count from Typesense, falling back to MongoDB:',
+          error,
+        )
+      }
+    }
+
     const { pipeline } = await (this as any).__smartQueryGetPipeline(
       { ...query },
       true,
@@ -441,6 +686,7 @@ export default function (
     query: { [key: string]: string },
     forCount = false,
     prePipeline: PipelineStage[] = [],
+    typesenseIds?: string[],
   ) {
     const hasTextIndex = this.schema.indexes().some(([index]) => {
       return Object.values(index).includes('text')
@@ -550,6 +796,15 @@ export default function (
     }
 
     const getMatch = async () => {
+      if (typesenseIds) {
+        return {
+          match: {
+            _id: { $in: typesenseIds.map((id) => new Types.ObjectId(id)) },
+          },
+          usingTextSearch: false,
+        }
+      }
+
       let $queryMatch: FilterQuery<object> = {}
       const _lookupsMatch: QueryForeign = {}
       let usingTextSearch = false
@@ -723,13 +978,31 @@ export default function (
         }
       }
 
-      pipeline.push(
-        ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
-        ...getUnwind(),
-        { $skip: ($page - 1) * $limit },
-        { $limit },
-        ...projectStage,
-      )
+      if (typesenseIds) {
+        pipeline.push(
+          ...getUnwind(),
+          {
+            $addFields: {
+              __order: {
+                $indexOfArray: [
+                  typesenseIds.map((id) => new Types.ObjectId(id)),
+                  '$_id',
+                ],
+              },
+            },
+          } as PipelineStage,
+          { $sort: { __order: 1 } } as PipelineStage,
+          ...projectStage,
+        )
+      } else {
+        pipeline.push(
+          ...(sort.$localSort ? [{ $sort: sort.$localSort }] : []),
+          ...getUnwind(),
+          { $skip: ($page - 1) * $limit },
+          { $limit },
+          ...projectStage,
+        )
+      }
     }
     return { pipeline, lookupsConfirmados }
   }

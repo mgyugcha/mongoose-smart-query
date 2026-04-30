@@ -40,10 +40,12 @@
     "ts-jest": "^29.4.9",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.58.1",
+    "typesense": "^3.0.6",
     "uglify-js": "^3.19.3"
   },
   "peerDependencies": {
-    "mongoose": "^8"
+    "mongoose": "^8",
+    "typesense": "^3.0.6"
   },
   "packageManager": "pnpm@10.29.3"
 }
