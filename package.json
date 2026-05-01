@@ -2,11 +2,10 @@
   "name": "mongoose-smart-query",
   "version": "1.3.3",
   "description": "Optimize rest requests",
-  "main": "./dist/mongoose-smart-query.js",
-  "types": "./dist/mongoose-smart-query.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "postbuild": "uglifyjs --compress --mangle --output dist/mongoose-smart-query.js -- dist/mongoose-smart-query.js",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "precommit": "pnpm run lint",
@@ -40,8 +39,7 @@
     "ts-jest": "^29.4.9",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.58.1",
-    "typesense": "^3.0.6",
-    "uglify-js": "^3.19.3"
+    "typesense": "^3.0.6"
   },
   "peerDependencies": {
     "mongoose": "^8",

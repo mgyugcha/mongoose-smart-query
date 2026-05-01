@@ -1,9 +1,5 @@
 import Database, { getPersonModel } from './load-database'
-import {
-  removeKeys,
-  stringToQuery,
-  normalizeSearchText,
-} from '../src/mongoose-smart-query'
+import { removeKeys, stringToQuery, normalizeSearchText } from '../src/'
 
 // describe('list of possible lookups', () => {
 //   it('a single nested field', () => {

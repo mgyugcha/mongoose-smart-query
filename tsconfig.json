@@ -64,6 +64,6 @@
     "forceConsistentCasingInFileNames": true  /* Disallow inconsistently-cased references to the same file. */
   },
   "files": [
-    "src/mongoose-smart-query.ts"
+    "src/index.ts"
   ]
 }

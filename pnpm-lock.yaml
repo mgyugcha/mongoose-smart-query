@@ -38,9 +38,6 @@ importers:
       typesense:
         specifier: ^3.0.6
         version: 3.0.6(@babel/runtime@7.29.2)
-      uglify-js:
-        specifier: ^3.19.3
-        version: 3.19.3
 
 packages:
 
@@ -3844,7 +3841,8 @@ snapshots:
     transitivePeerDependencies:
       - debug
 
-  uglify-js@3.19.3: {}
+  uglify-js@3.19.3:
+    optional: true
 
   undici-types@7.18.2: {}
 

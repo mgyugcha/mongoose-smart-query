@@ -1,4 +1,4 @@
-import mongooseSmartQuery from '../src/mongoose-smart-query'
+import mongooseSmartQuery from '../src/'
 import { Types, connect, Schema, model, connection, Document } from 'mongoose'
 
 const dbname = 'mongoose-smart-query-test'
