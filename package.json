@@ -32,13 +32,13 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.5.2",
-    "eslint": "^10.2.0",
-    "jest": "^30.3.0",
-    "mongoose": "^8.23.0",
+    "@types/node": "^25.7.0",
+    "eslint": "^10.3.0",
+    "jest": "^30.4.2",
+    "mongoose": "^8.23.1",
     "ts-jest": "^29.4.9",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.58.1",
+    "typescript-eslint": "^8.59.3",
     "typesense": "^3.0.6"
   },
   "peerDependencies": {
