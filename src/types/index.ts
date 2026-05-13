@@ -16,7 +16,6 @@ export interface SmartQueryFieldSchema {
 }
 
 export interface PluginTypesenseOptions {
-  typesenseCollection: string
   schema: Omit<CollectionCreateSchema, 'fields'> & {
     fields?: SmartQueryFieldSchema[]
   }

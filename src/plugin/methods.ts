@@ -44,7 +44,7 @@ export function createSmartQuery(options: PluginOptions) {
           options,
         )
         const searchResults = await globalTypesenseClient
-          .collections(typesense.typesenseCollection)
+          .collections(typesense.schema.name)
           .documents()
           .search(searchParams)
         typesenseIds =
@@ -58,6 +58,21 @@ export function createSmartQuery(options: PluginOptions) {
         )
         useMongoDirectly = true
       }
+    }
+
+    if (!useMongoDirectly && typesenseTotal === 0) {
+      if (autoPaginate) {
+        return {
+          data: [],
+          pagination: {
+            total: 0,
+            page: parseInt(query[pageQueryName]) || 1,
+            pages: 0,
+            limit: parseInt(query[limitQueryName]) || defaultLimit,
+          },
+        }
+      }
+      return []
     }
 
     if (autoPaginate) {
@@ -167,7 +182,7 @@ export function createSmartCount(options: PluginOptions) {
           options,
         )
         const searchResults = await globalTypesenseClient
-          .collections(typesense.typesenseCollection)
+          .collections(typesense.schema.name)
           .documents()
           .search(searchParams)
         return searchResults.found || 0
