@@ -10,6 +10,7 @@ import { getCampo, reemplazarSubdoc } from '../utils'
 import {
   buildTypesenseSearchParameters,
   globalTypesenseClient,
+  hasUnindexedFields,
 } from '../typesense'
 
 export function createSmartQuery(options: PluginOptions) {
@@ -36,7 +37,11 @@ export function createSmartQuery(options: PluginOptions) {
     let typesenseIds: string[] = []
     let typesenseTotal = 0
 
-    if (globalTypesenseClient && typesense) {
+    if (
+      globalTypesenseClient &&
+      typesense &&
+      !hasUnindexedFields(query, typesense.schema, options)
+    ) {
       try {
         const searchParams = buildTypesenseSearchParameters(
           query,
@@ -174,7 +179,11 @@ export function createSmartCount(options: PluginOptions) {
     this: Model<T>,
     query: { [key: string]: string } = {},
   ) {
-    if (globalTypesenseClient && typesense) {
+    if (
+      globalTypesenseClient &&
+      typesense &&
+      !hasUnindexedFields(query, typesense.schema, options)
+    ) {
       try {
         const searchParams = buildTypesenseSearchParameters(
           query,

@@ -28,7 +28,7 @@ export const buildTypesenseSearchParameters = (
     ?.filter((f) => f.type.includes('string') && f.name !== 'id' && !f.facet)
     .map((f) => f.name)
 
-  if (fieldsForDefaultQuery && query[queryName]) {
+  if (fieldsForDefaultQuery) {
     queryByFields = fieldsForDefaultQuery
       .split(' ')
       .map((mongoField) => {
@@ -172,4 +172,42 @@ export const buildTypesenseSearchParameters = (
   }
 
   return searchParams
+}
+
+export const hasUnindexedFields = (
+  query: { [key: string]: string },
+  tsSchema: PluginTypesenseOptions['schema'],
+  options: PluginOptions,
+): boolean => {
+  const {
+    queryName = '$q',
+    pageQueryName = '$page',
+    limitQueryName = '$limit',
+    sortQueryName = '$sort',
+    fieldsQueryName = '$fields',
+    unwindName = '$unwind',
+    textQueryName = '$text',
+    allFieldsQueryName = '$getAllFields',
+  } = options
+
+  const specialKeys = [
+    pageQueryName,
+    limitQueryName,
+    sortQueryName,
+    queryName,
+    fieldsQueryName,
+    unwindName,
+    textQueryName,
+    allFieldsQueryName,
+  ]
+
+  for (const key in query) {
+    if (specialKeys.includes(key)) continue
+    const field = tsSchema.fields?.find(
+      (f) => (f.mongoField || f.name) === key,
+    )
+    if (!field) return true
+  }
+
+  return false
 }

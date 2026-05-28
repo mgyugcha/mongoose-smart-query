@@ -3,7 +3,10 @@ import mongooseSmartQuery, {
   setTypesenseConfig,
   globalTypesenseClient,
 } from '../src'
-import { buildTypesenseSearchParameters } from '../src/typesense/builder'
+import {
+  buildTypesenseSearchParameters,
+  hasUnindexedFields,
+} from '../src/typesense/builder'
 
 // Mock de Typesense
 jest.mock('typesense', () => {
@@ -107,6 +110,65 @@ describe('Typesense Integration', () => {
     })
   })
 
+  describe('hasUnindexedFields', () => {
+    const tsSchema = {
+      name: 'invoices',
+      fields: [
+        { name: 'id', type: 'string', mongoField: '_id' },
+        { name: 'business', type: 'string' },
+        { name: 'issueDate', type: 'int64', mongoField: 'fecha_emision' },
+        { name: 'amount', type: 'float', mongoField: 'total' },
+      ],
+    }
+
+    const defaultOptions = {
+      queryName: '$q',
+      pageQueryName: '$page',
+      limitQueryName: '$limit',
+      sortQueryName: '$sort',
+      fieldsQueryName: '$fields',
+      unwindName: '$unwind',
+      textQueryName: '$text',
+      allFieldsQueryName: '$getAllFields',
+    }
+
+    it('debe retornar false cuando todos los campos están en el schema', () => {
+      const query = { _id: 'abc123', fecha_emision: '2024-01-01' }
+      const result = hasUnindexedFields(query, tsSchema, defaultOptions)
+      expect(result).toBe(false)
+    })
+
+    it('debe retornar false cuando solo hay claves especiales ($q, $page, etc.)', () => {
+      const query = { $q: 'test', $page: '1', $sort: '-_id' }
+      const result = hasUnindexedFields(query, tsSchema, defaultOptions)
+      expect(result).toBe(false)
+    })
+
+    it('debe retornar false cuando no hay campos de filtro', () => {
+      const query = { $q: 'test' }
+      const result = hasUnindexedFields(query, tsSchema, defaultOptions)
+      expect(result).toBe(false)
+    })
+
+    it('debe retornar true cuando al menos un campo no está en el schema', () => {
+      const query = { $q: 'test', cliente: 'ObjectId("abc")' }
+      const result = hasUnindexedFields(query, tsSchema, defaultOptions)
+      expect(result).toBe(true)
+    })
+
+    it('debe retornar true con mezcla de campos indexados y no indexados', () => {
+      const query = { _id: 'abc', cliente: 'ObjectId("xyz")' }
+      const result = hasUnindexedFields(query, tsSchema, defaultOptions)
+      expect(result).toBe(true)
+    })
+
+    it('debe reconocer campos por su mongoField', () => {
+      const query = { total: '100', fecha_emision: '2024-01-01' }
+      const result = hasUnindexedFields(query, tsSchema, defaultOptions)
+      expect(result).toBe(false)
+    })
+  })
+
   describe('smartQuery with Typesense', () => {
     let TestModel: mongoose.Model<any>
     let mockSearch: jest.Mock
@@ -163,31 +225,22 @@ describe('Typesense Integration', () => {
       aggregateSpy.mockRestore()
     })
 
-    it('debe realizar fallback a MongoDB si Typesense lanza un error', async () => {
-      mockSearch.mockRejectedValueOnce(new Error('Typesense is down'))
-
-      // Espiamos aggregate y devolvemos un mock de resultados de Mongoose
+    it('debe saltar Typesense y usar MongoDB cuando hay campos no indexados', async () => {
       const aggregateSpy = jest
         .spyOn(TestModel, 'aggregate')
-        .mockResolvedValueOnce([{ _id: 'abc', name: 'MongoResult' }])
-
-      // Suprimimos console.error para no ensuciar la consola de tests
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation()
+        .mockResolvedValueOnce([
+          { _id: '5f8d04f3b54764421b7156c1', name: 'Filtered' },
+        ])
 
       const result = await (TestModel as any).smartQuery(
-        { $q: 'test' },
+        { $q: 'test', unknownField: 'someValue' },
         { autoPaginate: false },
       )
 
-      expect(mockSearch).toHaveBeenCalled()
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Error fetching from Typesense, falling back to MongoDB:',
-        expect.any(Error),
-      )
+      expect(mockSearch).not.toHaveBeenCalled()
       expect(aggregateSpy).toHaveBeenCalled()
-      expect(result).toEqual([{ _id: 'abc', name: 'MongoResult' }])
+      expect(result).toHaveLength(1)
 
-      consoleSpy.mockRestore()
       aggregateSpy.mockRestore()
     })
 
@@ -210,6 +263,12 @@ describe('Typesense Integration', () => {
           ]) as any
         })
 
+      const result = await (TestModel as any).smartQuery(
+        { $q: 'test' },
+        { autoPaginate: false },
+      )
+
+      expect(result).toBeDefined()
       expect(mockSearch).toHaveBeenCalled()
       expect(aggregateSpy).toHaveBeenCalled()
 
@@ -257,6 +316,23 @@ describe('Typesense Integration', () => {
       expect(mockSearch).toHaveBeenCalled()
       expect(aggregateSpy).not.toHaveBeenCalled()
       expect(count).toBe(42)
+
+      aggregateSpy.mockRestore()
+    })
+
+    it('debe saltar Typesense y usar MongoDB en smartCount cuando hay campos no indexados', async () => {
+      const aggregateSpy = jest
+        .spyOn(TestModel, 'aggregate')
+        .mockResolvedValueOnce([{ size: 5 }])
+
+      const count = await (TestModel as any).smartCount({
+        $q: 'hello',
+        cliente: 'ObjectId("abc")',
+      })
+
+      expect(mockSearch).not.toHaveBeenCalled()
+      expect(aggregateSpy).toHaveBeenCalled()
+      expect(count).toBe(5)
 
       aggregateSpy.mockRestore()
     })
