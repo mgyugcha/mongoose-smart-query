@@ -3,6 +3,7 @@ import {
   Model,
   PipelineStage,
   Schema,
+  SchemaType,
   Types,
   connection,
 } from 'mongoose'
@@ -62,6 +63,13 @@ export function createSmartQueryGetPipeline(
       for (const keyInicial in query) {
         const path = schema.path(keyInicial)
         if (!path && !keyInicial.includes('.')) continue
+        const arrayPath = path as
+          | (SchemaType & { caster?: { instance?: string } })
+          | undefined
+        const instance =
+          path?.instance === 'Array'
+            ? arrayPath?.caster?.instance
+            : path?.instance
         let key = keyInicial
         let lookupKey: string | undefined
         const valorQuery = query[key]
@@ -105,12 +113,12 @@ export function createSmartQueryGetPipeline(
               case '$nin': {
                 const findin = value
                   .split(',')
-                  .map((item) => parseValue(item.trim(), path?.instance))
+                  .map((item) => parseValue(item.trim(), instance))
                 $filtroActual[key] = { [operator]: findin }
                 break
               }
               default: {
-                const parsedValue = parseValue(value, path?.instance)
+                const parsedValue = parseValue(value, instance)
                 if (operator) {
                   if (typeof $filtroActual[key] === 'object') {
                     $filtroActual[key][operator] = parsedValue
@@ -134,7 +142,7 @@ export function createSmartQueryGetPipeline(
             Object.assign($toAdd, $filtroActual)
           }
         } else {
-          $toAdd[key] = parseValue(valorQuery, path?.instance)
+          $toAdd[key] = parseValue(valorQuery, instance)
         }
       }
       if ($or.length !== 0) $localMatch.$or = $or
