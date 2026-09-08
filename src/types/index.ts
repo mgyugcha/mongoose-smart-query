@@ -1,5 +1,6 @@
 import { PipelineStage } from 'mongoose'
 import type { CollectionCreateSchema } from 'typesense/lib/Typesense/Collections'
+import type { SearchParams } from 'typesense/lib/Typesense/Documents'
 
 export interface SmartQueryFieldSchema {
   name: string
@@ -19,6 +20,13 @@ export interface PluginTypesenseOptions {
   schema: Omit<CollectionCreateSchema, 'fields'> & {
     fields?: SmartQueryFieldSchema[]
   }
+  /**
+   * Additional Typesense search parameters. Use a function when parameters
+   * depend on the incoming query, for example to disable typos for IDs.
+   */
+  searchParameters?:
+    | Partial<SearchParams<any>>
+    | ((query: Record<string, string>) => Partial<SearchParams<any>>)
 }
 
 export interface LookupConfirmado {

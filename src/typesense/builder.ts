@@ -5,6 +5,7 @@ export const buildTypesenseSearchParameters = (
   query: { [key: string]: string },
   tsSchema: PluginTypesenseOptions['schema'],
   options: PluginOptions,
+  typesenseOptions?: PluginTypesenseOptions,
 ): SearchParams<any> => {
   const {
     queryName = '$q',
@@ -171,7 +172,13 @@ export const buildTypesenseSearchParameters = (
     }
   }
 
-  return searchParams
+  const customSearchParameters = typesenseOptions?.searchParameters
+  const overrides =
+    typeof customSearchParameters === 'function'
+      ? customSearchParameters(query)
+      : customSearchParameters
+
+  return { ...searchParams, ...overrides }
 }
 
 export const hasUnindexedFields = (
@@ -203,9 +210,7 @@ export const hasUnindexedFields = (
 
   for (const key in query) {
     if (specialKeys.includes(key)) continue
-    const field = tsSchema.fields?.find(
-      (f) => (f.mongoField || f.name) === key,
-    )
+    const field = tsSchema.fields?.find((f) => (f.mongoField || f.name) === key)
     if (!field) return true
   }
 

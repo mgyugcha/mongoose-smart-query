@@ -47,6 +47,7 @@ export function createSmartQuery(options: PluginOptions) {
           query,
           typesense.schema,
           options,
+          typesense,
         )
         const searchResults = await globalTypesenseClient
           .collections(typesense.schema.name)
@@ -189,6 +190,7 @@ export function createSmartCount(options: PluginOptions) {
           query,
           typesense.schema,
           options,
+          typesense,
         )
         const searchResults = await globalTypesenseClient
           .collections(typesense.schema.name)

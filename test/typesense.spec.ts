@@ -57,6 +57,26 @@ describe('Typesense Integration', () => {
       expect(result.query_by).toBe('business')
     })
 
+    it('debe permitir parámetros dinámicos para búsquedas exactas de identificadores', () => {
+      const searchParameters = jest.fn((query: Record<string, string>) => {
+        if (/^\d{10,13}$/.test(query.$q || '')) {
+          return { num_typos: 0, prefix: false }
+        }
+        return {}
+      })
+
+      const result = buildTypesenseSearchParameters(
+        { $q: '1291767571001' },
+        tsSchema,
+        defaultOptions,
+        { schema: tsSchema, searchParameters },
+      )
+
+      expect(searchParameters).toHaveBeenCalledWith({ $q: '1291767571001' })
+      expect(result.num_typos).toBe(0)
+      expect(result.prefix).toBe(false)
+    })
+
     it('debe mapear filtros con operadores $gte y $lte e inferir fechas a timestamps', () => {
       const query = {
         fecha_emision:
@@ -187,6 +207,10 @@ describe('Typesense Integration', () => {
               { name: 'name', type: 'string' },
             ],
           },
+          searchParameters: (query) =>
+            /^\d{10,13}$/.test(query.$q || '')
+              ? { num_typos: 0, prefix: false }
+              : {},
         },
       })
       TestModel = mongoose.model('TypesenseTest', schema)
@@ -223,6 +247,16 @@ describe('Typesense Integration', () => {
       expect(result).toEqual([])
 
       aggregateSpy.mockRestore()
+    })
+
+    it('envía parámetros exactos a Typesense para identificadores numéricos', async () => {
+      mockSearch.mockResolvedValueOnce({ found: 0, hits: [] })
+
+      await (TestModel as any).smartQuery({ $q: '1291767571001' })
+
+      expect(mockSearch).toHaveBeenCalledWith(
+        expect.objectContaining({ num_typos: 0, prefix: false }),
+      )
     })
 
     it('debe saltar Typesense y usar MongoDB cuando hay campos no indexados', async () => {
