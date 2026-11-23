@@ -1,17 +1,140 @@
 import { Model, Types, connection } from 'mongoose'
+import type { SearchParams } from 'typesense/lib/Typesense/Documents'
 import type {
   LookupConfirmado,
   PluginOptions,
   SmartQueryOptions,
   SmartQueryPagination,
   SmartQueryResult,
+  SmartQueryTypesenseOptions,
 } from '../types'
 import { getCampo, reemplazarSubdoc } from '../utils'
 import {
   buildTypesenseSearchParameters,
-  globalTypesenseClient,
   hasUnindexedFields,
 } from '../typesense'
+import { resolveTypesenseClient } from '../typesense/config'
+
+const TYPESENSE_FAILURE_LOG_INTERVAL_MS = 60 * 1000
+const lastTypesenseFailureLogAt: Record<string, number> = Object.create(null)
+
+const conciseErrorMessage = (message: string): string =>
+  message
+    .split('\n')[0]
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\?\S*/g, '')
+    .trim()
+    .slice(0, 120)
+
+const typesenseHttpStatus = (error: unknown): number | undefined => {
+  const status = (error as { httpStatus?: unknown } | null)?.httpStatus
+  return typeof status === 'number' ? status : undefined
+}
+
+const typesenseFailureCause = (error: unknown): string => {
+  const typed = error as
+    | { code?: unknown; httpStatus?: unknown; message?: unknown }
+    | null
+    | undefined
+  const parts: string[] = []
+  if (typeof typed?.code === 'string' || typeof typed?.code === 'number') {
+    parts.push(String(typed.code))
+  }
+  const httpStatus = typesenseHttpStatus(error)
+  if (httpStatus !== undefined) {
+    parts.push(`HTTP ${httpStatus}`)
+  }
+  if (typeof typed?.message === 'string') {
+    const message = conciseErrorMessage(typed.message)
+    if (message) parts.push(message)
+  }
+  return parts.join(', ') || 'error desconocido'
+}
+
+const logTypesenseFailure = (collection: string, error: unknown) => {
+  const httpStatus = typesenseHttpStatus(error)
+  const cause = typesenseFailureCause(error)
+  const isRejectedQuery =
+    httpStatus !== undefined && httpStatus >= 400 && httpStatus < 500
+
+  // A rejected query is per-call; it must be visible every time.
+  if (isRejectedQuery) {
+    console.error(
+      `[mongoose-smart-query] Typesense rechazó la consulta en ${collection} (${cause}); usando MongoDB`,
+    )
+    return
+  }
+
+  const now = Date.now()
+  const lastLogAt = lastTypesenseFailureLogAt[collection]
+  if (
+    lastLogAt !== undefined &&
+    now - lastLogAt < TYPESENSE_FAILURE_LOG_INTERVAL_MS
+  ) {
+    return
+  }
+  lastTypesenseFailureLogAt[collection] = now
+  console.error(
+    `[mongoose-smart-query] Typesense no disponible en ${collection} (${cause}); usando MongoDB`,
+  )
+}
+
+const shouldUseTypesense = (
+  query: { [key: string]: string },
+  options: PluginOptions,
+  smartOptions: SmartQueryOptions,
+): boolean => {
+  const { typesense } = options
+  const callOptions = smartOptions.typesense
+  if (!typesense) return false
+  if (callOptions?.enabled === false) return false
+  if (typesense.activation === 'opt-in' && !callOptions) return false
+  return !hasUnindexedFields(query, typesense.schema, options)
+}
+
+const mergeFilterBy = (
+  filters: Array<string | undefined>,
+): string | undefined => {
+  const parts = filters.filter(
+    (filter): filter is string =>
+      typeof filter === 'string' && filter.trim() !== '',
+  )
+  if (parts.length === 0) return undefined
+  // Each part is wrapped so an extra `||` cannot escape the generated filter.
+  return parts.map((filter) => `(${filter})`).join(' && ')
+}
+
+const buildTypesenseSearchParams = (
+  query: { [key: string]: string },
+  options: PluginOptions,
+  callOptions?: SmartQueryTypesenseOptions,
+): SearchParams<any> => {
+  const params = buildTypesenseSearchParameters(
+    query,
+    options.typesense!.schema,
+    options,
+    options.typesense,
+  )
+
+  const searchParameters = callOptions?.searchParameters
+  let searchParametersFilterBy: string | undefined
+  if (searchParameters) {
+    const restParams: Record<string, any> = { ...searchParameters }
+    searchParametersFilterBy = restParams.filter_by
+    delete restParams.filter_by
+    Object.assign(params, restParams)
+  }
+
+  if (callOptions?.filterBy || searchParametersFilterBy) {
+    params.filter_by = mergeFilterBy([
+      params.filter_by,
+      callOptions?.filterBy,
+      searchParametersFilterBy,
+    ])
+  }
+
+  return params
+}
 
 export function createSmartQuery(options: PluginOptions) {
   const {
@@ -37,20 +160,20 @@ export function createSmartQuery(options: PluginOptions) {
     let typesenseIds: string[] = []
     let typesenseTotal = 0
 
-    if (
-      globalTypesenseClient &&
-      typesense &&
-      !hasUnindexedFields(query, typesense.schema, options)
-    ) {
+    const typesenseClient =
+      typesense && shouldUseTypesense(query, options, smartOptions)
+        ? resolveTypesenseClient(typesense.clientOptions)
+        : null
+
+    if (typesenseClient) {
       try {
-        const searchParams = buildTypesenseSearchParameters(
+        const searchParams = buildTypesenseSearchParams(
           query,
-          typesense.schema,
           options,
-          typesense,
+          smartOptions.typesense,
         )
-        const searchResults = await globalTypesenseClient
-          .collections(typesense.schema.name)
+        const searchResults = await typesenseClient
+          .collections(typesense!.schema.name)
           .documents()
           .search(searchParams)
         typesenseIds =
@@ -58,10 +181,7 @@ export function createSmartQuery(options: PluginOptions) {
         typesenseTotal = searchResults.found || 0
         useMongoDirectly = false
       } catch (error) {
-        console.error(
-          'Error fetching from Typesense, falling back to MongoDB:',
-          error,
-        )
+        logTypesenseFailure(typesense!.schema.name, error)
         useMongoDirectly = true
       }
     }
@@ -179,29 +299,27 @@ export function createSmartCount(options: PluginOptions) {
   return async function <T>(
     this: Model<T>,
     query: { [key: string]: string } = {},
+    smartOptions: SmartQueryOptions = {},
   ) {
-    if (
-      globalTypesenseClient &&
-      typesense &&
-      !hasUnindexedFields(query, typesense.schema, options)
-    ) {
+    const typesenseClient =
+      typesense && shouldUseTypesense(query, options, smartOptions)
+        ? resolveTypesenseClient(typesense.clientOptions)
+        : null
+
+    if (typesenseClient) {
       try {
-        const searchParams = buildTypesenseSearchParameters(
+        const searchParams = buildTypesenseSearchParams(
           query,
-          typesense.schema,
           options,
-          typesense,
+          smartOptions.typesense,
         )
-        const searchResults = await globalTypesenseClient
-          .collections(typesense.schema.name)
+        const searchResults = await typesenseClient
+          .collections(typesense!.schema.name)
           .documents()
           .search(searchParams)
         return searchResults.found || 0
       } catch (error) {
-        console.error(
-          'Error fetching count from Typesense, falling back to MongoDB:',
-          error,
-        )
+        logTypesenseFailure(typesense!.schema.name, error)
       }
     }
 

@@ -134,6 +134,54 @@ PersonSchema.plugin(mongooseSmartQuery, {
 
 By combining a single normalized `searchString` field and `normalizeSearchQuery: true`, MongoDB can evaluate your autocomplete searches with optimum efficiency, bypassing the `$and` and case-insensitive (`i`) regex overhead.
 
+## Typesense Integration
+
+Create the shared client once at startup with `setTypesenseConfig`:
+
+```typescript
+import { setTypesenseConfig } from 'mongoose-smart-query'
+
+setTypesenseConfig({
+  nodes: [{ host: 'localhost', port: 8108, protocol: 'http' }],
+  apiKey: 'your-api-key',
+})
+```
+
+Then configure the model. `activation: 'opt-in'` uses Typesense only when the
+call passes `typesense`; `clientOptions` is merged over the global
+configuration and cached per model.
+
+```typescript
+ProductSchema.plugin(mongooseSmartQuery, {
+  typesense: {
+    schema: {
+      name: 'products',
+      fields: [{ name: 'id', type: 'string' }],
+    },
+    activation: 'opt-in',
+    clientOptions: { connectionTimeoutSeconds: 0.8, numRetries: 0 },
+  },
+})
+```
+
+Per call, pass `typesense` (also accepted by `smartCount`):
+
+```typescript
+const result = await Product.smartQuery(query, {
+  autoPaginate: true,
+  typesense: {
+    enabled: true,
+    filterBy: '(status:=active || status:=draft)',
+    searchParameters: { sort_by: '_text_match:desc,code:asc' },
+  },
+})
+```
+
+`filterBy`, `searchParameters.filter_by` and the filter generated from the query
+are each wrapped in parentheses and joined with `&&`; `searchParameters` is
+applied last. With `activation: 'opt-in'`, `typesense.enabled` defaults to
+`true` when the object is present.
+
 ## Plugin Configuration
 
 These options are passed to the plugin during registration: `schema.plugin(mongooseSmartQuery, options)`.
